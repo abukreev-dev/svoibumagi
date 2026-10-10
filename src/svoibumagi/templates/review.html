@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}Проверка импорта — Свои бумаги{% endblock %}
+{% block content %}
+<h2>Импорт №{{ attempt_id }} — {{ review.state }}</h2>
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+<p>{{ review.preview.broker }}, вариант {{ review.preview.variant }}, период {{ review.preview.period_start }} — {{ review.preview.period_end }}.</p>
+<p>Выбран локальный счёт №{{ review.selected_account.id }} «{{ review.selected_account.name }}» ({{ review.selected_account.kind }}). Номер договора/счёта в исходном отчёте: <strong>{{ review.preview.account_number or 'недоступен для этой загрузки' }}</strong>{% if review.preview.account_kind %}; тип в отчёте: {{ review.preview.account_kind }}{% endif %}. Проверьте принадлежность перед подтверждением.</p>
+{% for warning in review.preview.warnings %}<p class="warn">{{ warning }}</p>{% endfor %}
+{% if review.requires_restage %}<p class="warn">Эта ожидающая загрузка создана старой версией адаптера. Удалите её ниже и загрузите исходный файл заново: классификация исходных строк должна попасть в предпросмотр.</p>{% endif %}
+<p>Сделок для журнала: {{ review.preview.trades | length }}; сделок без ID для сверки: {{ review.preview.summary_trades | default([]) | length }}; движений денег: {{ review.preview.cash_movements | length }}; строк вне проведённого журнала: {{ review.other_excluded | length }}; справочных строк инструментов: {{ review.instrument_references | length }}; служебных строк структуры: {{ review.structural_rows | length }}; строк брокерских итогов: {{ review.total_rows | length }}; неизвестных строк: {{ review.preview.unparsed | length }}.</p>
+<section>
+  <h3>Сверка</h3>
+  <div class="scroll"><table><tr><th>Вид</th><th>Объект</th><th>Расчёт</th><th>В отчёте</th><th>Разница</th><th>Статус</th></tr>
+  {% for check in review.preview.checks %}<tr><td>{{ check.kind }}</td><td>{{ check.key }}</td><td>{{ check.calculated if check.calculated is not none else '—' }}</td><td>{{ check.reported if check.reported is not none else '—' }}</td><td>{{ check.difference if check.difference is not none else '—' }}</td><td class="{% if check.status == 'matched' %}ok{% else %}warn{% endif %}">{{ check.status }} {{ check.reason }}</td></tr>{% endfor %}
+  </table></div>
+</section>
+<section>
+  <h3>Классифицированные строки вне проведённого журнала</h3>
+  <ul>{% for item in review.other_excluded %}<li>{{ item.location.sheet }}:{{ item.location.row }} — {{ item.reason }}</li>{% else %}<li>Нет.</li>{% endfor %}</ul>
+</section>
+{% if review.reference_rows %}
+<details>
+  <summary>Справочные строки инструментов ({{ review.reference_rows | length }})</summary>
+  <p>Использованы для сопоставления кода с ISIN или как продолжение строки позиции; отдельные операции в журнале не создают.</p>
+  <div class="scroll"><table><tr><th>Источник</th><th>Исходная строка</th></tr>
+  {% for item in review.reference_rows %}<tr><td>{{ item.sheet }}:{{ item.row }}</td><td>{{ item.raw | join(' | ') }}</td></tr>{% endfor %}
+  </table></div>
+</details>
+{% endif %}
+{% if review.structural_rows %}
+<details><summary>Строки структуры отчёта ({{ review.structural_rows | length }})</summary>
+  <p>Реквизиты отчёта, названия колонок, сноски, нумерация или нулевой валютный остаток; каждая строка сохранена вместе с источником.</p>
+  <ul>{% for item in review.structural_rows %}<li>{{ item.location.sheet }}:{{ item.location.row }} — {{ item.reason }}</li>{% endfor %}</ul>
+</details>
+{% endif %}
+{% if review.total_rows %}
+<details><summary>Итоги брокера ({{ review.total_rows | length }})</summary>
+  <p>Каждая сумма сверяется с детальными строками в таблице «Сверка». Расхождение требует решения при подтверждении.</p>
+  <ul>{% for item in review.total_rows %}<li>{{ item.location.sheet }}:{{ item.location.row }}</li>{% endfor %}</ul>
+</details>
+{% endif %}
+<section>
+  <h3>Неразобранные строки</h3>
+  <ul>{% for item in review.preview.unparsed %}<li>{{ item.location.sheet }}:{{ item.location.row }} — {{ item.reason }}</li>{% else %}<li>Нет.</li>{% endfor %}</ul>
+</section>
+{% if review.diagnostic_rows %}
+<section>
+  <h3>Исходные строки для проверки</h3>
+  <p>Данные из закрытой копии отчёта; доступны только после входа.</p>
+  <div class="scroll"><table><tr><th>Источник</th><th>Класс</th><th>Содержимое строки</th></tr>
+  {% for item in review.diagnostic_rows %}<tr><td>{{ item.sheet }}:{{ item.row }}</td><td>{{ item.classification }} {{ item.warning }}</td><td>{{ item.raw | join(' | ') }}</td></tr>{% endfor %}
+  </table></div>
+</section>
+{% endif %}
+<section>
+  <h3>Операции в предпросмотре</h3>
+  <div class="scroll"><table><tr><th>Источник</th><th>Дата</th><th>Тип</th><th>Инструмент/ссылка</th><th>Количество</th><th>Сумма</th><th>Совпадение</th></tr>
+  {% for trade in review.preview.trades %}<tr><td>{{ trade.location.sheet }}:{{ trade.location.row }}</td><td>{{ trade.traded_at }}</td><td>Сделка</td><td>{{ trade.name }} / {{ trade.isin }}</td><td>{{ trade.quantity }}</td><td>{{ trade.amount }}</td><td>Проверить ниже</td></tr>{% endfor %}
+  {% for movement in review.preview.cash_movements %}<tr><td>{{ movement.location.sheet }}:{{ movement.location.row }}</td><td>{{ movement.date }}</td><td>{{ movement.kind }}</td><td>{{ movement.broker_trade_id or '—' }}</td><td>—</td><td>{{ movement.amount }}</td><td>Проверить ниже</td></tr>{% endfor %}
+  </table></div>
+</section>
+<section>
+  <h3>Проверка повторов</h3>
+  <div class="scroll"><table><tr><th>Строка</th><th>Статус</th></tr>{% for item in review.event_candidates %}<tr><td>{{ item.key }}</td><td>{{ item.status }}</td></tr>{% endfor %}</table></div>
+</section>
+{% if review.state == 'awaiting_review' %}
+<section>
+  <h3>Подтвердить импорт</h3>
+  {% if review.requires_restage %}
+  <p class="warn">Подтверждение недоступно до повторной загрузки текущим адаптером.</p>
+  {% elif review.blocking_conflicts %}
+  <p class="warn">Импорт остановлен: такая же сделка уже проведена на другом счёте. Проверьте принадлежность договоров до повторной загрузки.</p>
+  <ul>{% for item in review.blocking_conflicts %}<li>{{ item.key }} — {{ item.reason }}</li>{% endfor %}</ul>
+  {% else %}
+  <p class="warn">Причина требуется для каждого расхождения, неизвестной строки и спорного повтора. Признание расхождения не меняет его статус на «сошлось».</p>
+  <form method="post" action="/imports/{{ attempt_id }}/confirm">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    {% for key in review.required_decisions %}<p><label>{{ key }}<br>
+      {% if key.startswith('summary:') %}<select name="action::{{ key }}" required><option value="">Выберите действие</option><option value="control_only">Оставить контрольной строкой</option><option value="promote">Провести как агрегированную сделку</option></select><br>{% endif %}
+      <input name="reason::{{ key }}" size="72" placeholder="Решение и причина" required></label></p>{% endfor %}
+    {% for item in review.ambiguous_events %}<p><label>{{ item.key }} — {{ item.reason }}<br>
+      <select name="action::{{ item.key }}"><option value="skip">Пропустить как повтор</option><option value="new">Считать новым событием</option></select>
+      {% if item.existing_options | length > 1 %}<select name="existing::{{ item.key }}"><option value="">Выберите строку существующего события при повторе</option>{% for option in item.existing_options %}<option value="{{ option.id }}">№{{ option.id }} · {{ option.file }} · {{ option.sheet }}:{{ option.row }}{% if option.raw_match == true %} · ячейки совпадают{% elif option.raw_match == false %} · ячейки различаются{% endif %}{% if option.same_location %} · тот же номер строки{% endif %}</option>{% endfor %}</select>{% endif %}
+      <input name="reason::{{ item.key }}" size="60" placeholder="Почему" required>
+    </label></p>{% endfor %}
+    <button>Подтвердить</button>
+  </form>
+  {% endif %}
+  <form method="post" action="/imports/{{ attempt_id }}/reject">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input name="reason" size="60" placeholder="Причина отклонения" required>
+    <button>Отклонить</button>
+  </form>
+</section>
+{% endif %}
+{% if review.state != 'committed' %}
+<section>
+  <h3>Удалить неподтверждённую загрузку</h3>
+  <p>Удалятся эта попытка и её решения. Исходный файл удалится, если на него больше не ссылается другая загрузка. Проведённые операции не удаляются.</p>
+  <form method="post" action="/imports/{{ attempt_id }}/delete">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <button>Удалить загрузку</button>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

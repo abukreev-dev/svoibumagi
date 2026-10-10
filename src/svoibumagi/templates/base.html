@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Свои бумаги{% endblock %}</title>
+  <style>
+    :root { font: 16px/1.45 system-ui, sans-serif; color: #17212d; background: #f5f7fa }
+    body { margin: 0 auto; max-width: 1180px; padding: 20px }
+    header { display: flex; align-items: center; gap: 24px; border-bottom: 1px solid #ccd4dd; margin-bottom: 24px }
+    nav { display: flex; gap: 16px; flex: 1 }
+    a { color: #155f9e }
+    section { background: white; border: 1px solid #dbe1e8; border-radius: 8px; padding: 18px; margin: 16px 0 }
+    table { border-collapse: collapse; width: 100%; font-size: .92rem }
+    th, td { border-bottom: 1px solid #e1e6eb; padding: 7px; text-align: left; vertical-align: top }
+    th { background: #f4f6f8 }
+    input, select, button { font: inherit; padding: 7px; margin: 3px }
+    button { background: #155f9e; color: white; border: 0; border-radius: 4px; cursor: pointer }
+    .error { color: #a52424; font-weight: 600 }
+    .warn { color: #8a5600; font-weight: 600 }
+    .ok { color: #176b42 }
+    .scroll { overflow-x: auto }
+    small { color: #536170 }
+  </style>
+</head>
+<body>
+<header>
+  <h1>Свои бумаги</h1>
+  {% if logged_in %}
+  <nav><a href="/">Обзор</a><a href="/instruments">Бумаги</a><a href="/operations">Операции</a></nav>
+  <form method="post" action="/logout"><input type="hidden" name="csrf" value="{{ csrf }}"><button>Выйти</button></form>
+  {% endif %}
+</header>
+{% block content %}{% endblock %}
+</body>
+</html>

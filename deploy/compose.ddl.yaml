@@ -1,0 +1,8 @@
+name: svoibumagi
+
+services:
+  app:
+    ports: !override
+      - "127.0.0.1:18110:8000"
+    volumes:
+      - /home/www/svoibumagi.bukreev.pro/backups:/backups

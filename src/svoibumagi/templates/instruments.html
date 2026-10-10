@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Бумаги — Свои бумаги{% endblock %}
+{% block content %}
+<h2>Каталог инструментов</h2>
+<p>Бумаги объединяются по точному ISIN. Название берётся из первого подтверждённого события и не служит идентификатором.</p>
+<div class="scroll"><table><tr><th>ID</th><th>ISIN</th><th>Название из отчёта</th></tr>
+{% for instrument in instruments %}<tr><td>{{ instrument.id }}</td><td>{{ instrument.isin }}</td><td>{{ instrument.display_name }}</td></tr>
+{% else %}<tr><td colspan="3">Пока нет подтверждённых сделок с известным ISIN.</td></tr>{% endfor %}
+</table></div>
+{% endblock %}

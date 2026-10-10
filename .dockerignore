@@ -1,0 +1,7 @@
+**
+!pyproject.toml
+!requirements.lock
+!README.md
+!LICENSE
+!src
+!src/**

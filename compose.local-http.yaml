@@ -1,0 +1,12 @@
+services:
+  app:
+    command:
+      - python
+      - -m
+      - svoibumagi
+      - serve
+      - --host
+      - 0.0.0.0
+      - --data-dir
+      - /data
+      - --insecure-container-http

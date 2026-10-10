@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}Операции — Свои бумаги{% endblock %}
+{% block content %}
+<h2>Проведённые операции</h2>
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+<form method="get" action="/operations">
+  <label>Счёт <select name="account_id"><option value="">Все счета</option>{% for account in accounts %}<option value="{{ account.id }}"{% if filters and filters.account_id == account.id %} selected{% endif %}>{{ account.name }}</option>{% endfor %}</select></label>
+  <label>Тип <select name="event_type"><option value="">Все</option><option value="trade"{% if filters and filters.event_type == 'trade' %} selected{% endif %}>Сделки</option><option value="cash"{% if filters and filters.event_type == 'cash' %} selected{% endif %}>Денежные операции</option><option value="security_transfer"{% if filters and filters.event_type == 'security_transfer' %} selected{% endif %}>Переводы бумаг</option></select></label>
+  <label>Источник <select name="source_type"><option value="">Все</option><option value="broker"{% if filters and filters.source_type == 'broker' %} selected{% endif %}>Отчёт брокера</option><option value="manual"{% if filters and filters.source_type == 'manual' %} selected{% endif %}>Ручная запись</option></select></label>
+  <label>С <input name="from_date" type="date" value="{{ filters.from_date if filters else '' }}"></label>
+  <label>По <input name="to_date" type="date" value="{{ filters.to_date if filters else '' }}"></label>
+  <label>Бумага или операция <input name="q" value="{{ filters.q if filters else '' }}" maxlength="100" placeholder="Название, ISIN, номер сделки"></label>
+  <button>Показать</button>
+</form>
+<p>Найдено операций: {{ events|length }}</p>
+<div class="scroll"><table><tr><th>№</th><th>Тип</th><th>Дата</th><th>Инструмент</th><th>Количество</th><th>Сумма</th><th>Источник</th></tr>
+{% for event in events %}<tr><td>{{ event.id }}</td><td>{{ event.event_type }}</td><td>{{ event.payload.traded_at or event.payload.date }}{% if event.execution_time %}<br><small>{{ event.execution_time }} · время сделки</small>{% endif %}</td><td>{{ event.payload.name or event.payload.kind }}{% if event.instrument_id %}<br><small>{{ event.payload.isin }} · ID {{ event.instrument_id }}</small>{% endif %}{% if event.event_type == 'security_transfer' %}<br><small>Парная строка {{ event.payload.paired_event_id }} · другой счёт {{ event.payload.peer_account_id }}</small>{% endif %}</td><td>{{ event.payload.quantity or '—' }}</td><td>{{ event.payload.amount if event.payload.amount is defined else '—' }}{% if event.payload.withheld_tax is defined and event.payload.withheld_tax is not none %}<br><small>Начислено до удержания; налог {{ event.payload.withheld_tax }} ₽ отражён отдельной строкой.</small>{% endif %}{% if event.payload.kind == 'principal_action' %}<br><small>{{ event.payload.action }}: доля {{ event.payload.principal_fraction }}, денежная строка {{ event.payload.cash_event_id }}</small>{% endif %}</td><td>{% if event.source_type == 'manual' %}Ручная корректировка: {{ event.source_reason }}{% else %}<a href="/operations/{{ event.id }}/source">{{ event.original_name }}</a>, {{ event.sheet }}:{{ event.row_number }}{% if event.source_row_verified is sameas false %}<br><strong class="error">Нет сохранённой исходной строки; подтверждённый расчёт недоступен.</strong>{% endif %}{% endif %}</td></tr>{% endfor %}
+</table></div>
+<section>
+  <h3>Ручная корректировка</h3>
+  <p>Каждая корректировка становится отдельной неизменяемой операцией с причиной. Её нужно сверить с отчётными остатками; исходная проверка брокерского файла не переписывается.</p>
+  <form method="post" action="/operations/manual/cash">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <h4>Денежное событие</h4>
+    <select name="account_id" required>{% for account in accounts %}<option value="{{ account.id }}">{{ account.name }}</option>{% endfor %}</select>
+    <input name="date" type="date" required>
+    <select name="kind"><option value="deposit">Пополнение</option><option value="withdrawal">Вывод</option><option value="coupon">Купон</option><option value="dividend">Дивиденд</option><option value="dividend_net">Дивиденд после удержания</option><option value="tax_withheld">Удержанный налог</option><option value="principal_return">Возврат тела облигации</option><option value="trade_cash">Расчёт по сделке</option><option value="trade_fee">Комиссия</option><option value="accrued_interest">НКД</option></select>
+    <input name="amount" placeholder="Сумма со знаком, RUB" required>
+    <input name="reason" size="48" placeholder="Источник и причина корректировки" required>
+    <button>Добавить денежное событие</button>
+  </form>
+  <form method="post" action="/operations/manual/principal">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <h4>Амортизация или погашение облигации</h4>
+    <p>Укажите ID уже проведённого положительного возврата тела на том же счёте и в ту же дату. Если строки брокера нет, сначала внесите денежное событие «Возврат тела облигации» с основанием. Доля относится к оставшемуся номиналу; 1 означает полное погашение.</p>
+    <select name="account_id" required>{% for account in accounts %}<option value="{{ account.id }}">{{ account.name }}</option>{% endfor %}</select>
+    <input name="date" type="date" required>
+    <input name="isin" placeholder="ISIN" required>
+    <input name="name" placeholder="Название облигации" required>
+    <input name="principal_fraction" placeholder="Доля оставшегося номинала, 0–1" required>
+    <input name="cash_event_id" placeholder="ID денежной строки, например M1" required>
+    <input name="reason" size="48" placeholder="Источник номинала, выплаты и причина" required>
+    <button>Добавить действие</button>
+  </form>
+  <form method="post" action="/operations/manual/trade">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <h4>Сделка</h4>
+    <select name="account_id" required>{% for account in accounts %}<option value="{{ account.id }}">{{ account.name }}</option>{% endfor %}</select>
+    <input name="traded_at" type="date" required title="Дата заключения">
+    <input name="settled_at" type="date" required title="Дата расчёта">
+    <input name="isin" placeholder="ISIN" required>
+    <input name="name" placeholder="Название бумаги" required>
+    <input name="quantity" placeholder="Количество: покупка +, продажа −" required>
+    <input name="price" placeholder="Цена RUB" required>
+    <input name="amount" placeholder="Сумма сделки RUB" required>
+    <input name="commission" placeholder="Комиссия RUB" required>
+    <input name="reason" size="48" placeholder="Источник и причина корректировки" required>
+    <button>Добавить сделку</button>
+  </form>
+  <form method="post" action="/operations/manual/security-transfer">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <h4>Перевод бумаги между своими счетами</h4>
+    <p>Укажите два принадлежащих вам счёта и источник подтверждения перевода. Операция неизменяема; количество и себестоимость переносятся из подтверждённых партий, денежных потоков и продажи нет.</p>
+    <label>Откуда <select name="source_account_id" required>{% for account in accounts %}<option value="{{ account.id }}">{{ account.name }}</option>{% endfor %}</select></label>
+    <label>Куда <select name="destination_account_id" required>{% for account in accounts %}<option value="{{ account.id }}">{{ account.name }}</option>{% endfor %}</select></label>
+    <input name="date" type="date" required>
+    <input name="isin" placeholder="ISIN" maxlength="12" required>
+    <input name="name" placeholder="Название бумаги" required>
+    <input name="quantity" placeholder="Количество > 0" required>
+    <input name="reason" size="48" placeholder="Источник подтверждения и причина" required>
+    <button>Добавить перевод</button>
+  </form>
+</section>
+<section>
+  <h3>Классификация денежных переводов</h3>
+  <p>Для перевода между своими счетами укажите ID встречной операции на другом счёте. Суммы должны быть равны по модулю и противоположны по знаку.</p>
+  {% for event in events if event.event_type == 'cash' and event.payload.kind == 'transfer_unclassified' %}
+  <form method="post" action="/operations/{{ event.id }}/classify">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <strong>№{{ event.id }} · счёт {{ event.account_id }} · {{ event.payload.date }} · {{ event.payload.amount }} RUB</strong>
+    <select name="kind"><option value="deposit">Внешнее пополнение</option><option value="withdrawal">Внешний вывод</option><option value="internal_in">Внутренний вход</option><option value="internal_out">Внутренний выход</option></select>
+    <input name="paired_event_id" type="number" min="1" placeholder="ID встречной операции">
+    <input name="reason" size="40" placeholder="Основание" required>
+    <button>Сохранить</button>
+  </form>
+  {% else %}<p>Неклассифицированных переводов в текущем списке нет.</p>{% endfor %}
+</section>
+{% endblock %}

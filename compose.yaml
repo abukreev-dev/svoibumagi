@@ -1,0 +1,20 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    environment:
+      SVOIBUMAGI_PASSWORD_HASH: ${SVOIBUMAGI_PASSWORD_HASH:?set SVOIBUMAGI_PASSWORD_HASH in a private .env file}
+      SVOIBUMAGI_MOEX_ISS_ENABLED: ${SVOIBUMAGI_MOEX_ISS_ENABLED:-0}
+      HTTPS_PROXY: ${SVOIBUMAGI_ISS_HTTPS_PROXY:-}
+    volumes:
+      - svoibumagi_data:/data
+    ports:
+      - "127.0.0.1:${SVOIBUMAGI_HOST_PORT:-18080}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/login', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  svoibumagi_data:
