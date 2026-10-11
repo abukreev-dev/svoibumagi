@@ -33,6 +33,16 @@
     .portfolio-map { display:flex; flex-wrap:wrap; gap:8px }
     .map-tile { min-width:150px; min-height:100px; flex-basis:150px; background:#e4f2ed; border:1px solid #cce5da; border-radius:12px; padding:14px; display:flex; flex-direction:column; gap:5px }
     .map-tile span { font-size:1.25rem; font-weight:700; color:#086657 }
+    .home-sections { display:flex; flex-direction:column }
+    .home-sections > section:nth-of-type(4) { order:1 }
+    .home-sections > section:nth-of-type(5) { order:2 }
+    .home-sections > section:nth-of-type(3) { order:3 }
+    .home-sections > section:nth-of-type(1) { order:4 }
+    .home-sections > section:nth-of-type(2) { order:5 }
+    .home-sections > section:nth-of-type(6) { order:6 }
+    .home-sections > section:nth-of-type(7) { order:7 }
+    summary { cursor:pointer; font-weight:650; color:#087564; padding:4px 0 }
+    details[open] > summary { margin-bottom:18px }
     table { border-collapse: collapse; width: 100%; font-size: .92rem }
     th, td { border-bottom: 1px solid #e1e6eb; padding: 7px; text-align: left; vertical-align: top }
     th { background: #f5f9f8 }

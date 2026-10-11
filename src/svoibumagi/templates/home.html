@@ -10,6 +10,7 @@
   <article class="summary-card"><span>Доходность XIRR</span><strong>{% if combined.xirr is not none %}{{ (combined.xirr * 100) | round(2) }} %{% else %}Пока нет данных{% endif %}</strong><small>{% if combined.xirr is none %}Нужна полная история и сверка{% else %}На {{ combined.as_of }}{% endif %}</small></article>
 </div>
 {% if estimate.incomplete %}<p class="notice">Показана известная часть портфеля. Некоторые отчёты, цены или проверки отсутствуют. Детали ниже помогают исправить конкретные пробелы.</p>{% endif %}
+<div class="home-sections">
 <section>
   <h2>Счета</h2>
   <form method="post" action="/accounts">
@@ -33,6 +34,7 @@
 </section>
 <section>
   <h2>Расчёты по счетам</h2>
+  <details><summary>Полнота истории, расчёты и подтверждения</summary>
   {% if combined.xirr is not none %}
     <p class="ok">Общий портфель на {{ combined.as_of }}: {{ combined.terminal }} ₽; XIRR {{ combined.xirr * 100 }} %.</p>
     {% if combined.status != 'available' %}<p class="warn">Себестоимость и реализованный результат общего портфеля недоступны: {{ combined.reasons | map('reason_ru') | join('; ') }}.</p>{% endif %}
@@ -102,6 +104,7 @@
     {% endfor %}
   {% else %}<p>Пока нет счетов.</p>{% endfor %}
   <small>Подтверждение начала истории и периоды без операций записываются отдельно. Для пропуска без отчёта расчёт проверяет равенство позиций и денег в соседних отчётах и отсутствие операций. Остальные условия расчёта: нулевые начальные остатки, согласованные сверки и полная оценка на дату отчёта.</small>
+  </details>
 </section>
 <section>
   <h2>Оценка бумаг</h2>
@@ -120,6 +123,7 @@
   <div class="scroll"><table><tr><th>Счёт</th><th>Инструмент</th><th>Количество, шт.</th><th>Дата позиции</th><th>Цена или источник оценки</th><th>Стоимость, ₽</th></tr>
   {% for row in estimate.positions %}<tr><td>{{ row.account.account_number or ('Номер неоднозначен' if row.account.account_number_conflict else 'Номер неизвестен') }} — {{ row.account.name }}</td><td>{{ row.name }}<br><small>{{ row.isin or 'ISIN неизвестен' }}</small></td><td>{{ row.quantity }}</td><td>{{ row.report_date }}</td><td>{% if row.price_status == 'broker_report' %}Итоговая стоимость из отчёта брокера · {{ row.report_date }}; цена одной бумаги не указана{% elif row.price %}{{ row.price.amount }} ₽ за бумагу · {{ row.price.as_of }} · {{ row.price.source | price_source_ru }}{% if row.price_status == 'stale' %} · устарела{% endif %}{% else %}—{% endif %}</td><td>{{ row.value | rub if row.value is not none else ('Нужна конвертация' if row.price_status == 'currency_conversion_required' else 'Неизвестна') }}</td></tr>{% endfor %}
   </table></div>
+  <details><summary>Управление ценами</summary>
   <h3>Ручная цена</h3>
   <form method="post" action="/prices">
     <input type="hidden" name="csrf" value="{{ csrf }}">
@@ -166,6 +170,7 @@
   {% else %}
   <p class="warn">Автоматическая загрузка цен Мосбиржи отключена в конфигурации. Для оценки можно внести цену вручную с датой и источником.</p>
   {% endif %}
+  </details>
 </section>
 <section>
   <h2>Последние позиции по отчётам</h2>
@@ -191,4 +196,5 @@
   <form method="post" action="/backup"><input type="hidden" name="csrf" value="{{ csrf }}"><button>Скачать копию базы и файлов</button></form>
   <small>Храните архив как конфиденциальный документ. Восстановление выполняется в новое хранилище после проверки целостности.</small>
 </section>
+</div>
 {% endblock %}
