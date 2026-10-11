@@ -222,7 +222,7 @@ def test_web_unknown_row_needs_decision_and_reupload_is_idempotent(tmp_path: Pat
         assert exported[0]["account_number"] == "SYN123"
         assert any(check["status"] == "difference" for check in store.committed_reports(account_id)[0]["checks"])
         repeated = upload()
-        assert "duplicate" in client.get(repeated).text
+        assert "Повтор" in client.get(repeated).text
         assert client.post(repeated + "/confirm", data={"csrf": csrf, **reasons}).status_code == 303
         assert len(store.list_events(account_id)) == 1
 
@@ -279,7 +279,7 @@ def test_auth_csrf_and_import_preview(tmp_path: Path, monkeypatch):
     attempt_path = response.headers["location"]
     preview = client.get(attempt_path)
     assert preview.status_code == 200
-    assert "matched" in preview.text
+    assert "Сошлось" in preview.text
     assert client.post(attempt_path + "/confirm", data={"csrf": csrf}).status_code == 303
     assert store.list_attempts()[0]["state"] == "committed"
     overview = client.get("/")
@@ -289,7 +289,7 @@ def test_auth_csrf_and_import_preview(tmp_path: Path, monkeypatch):
         rows = list(csv.DictReader(StringIO(client.get(f"/export/{export_name}.csv").content.decode("utf-8-sig"))))
         assert rows and rows[0]["account_number"] == "SYN123", export_name
     assert "Выплаты и удержания по проведённому журналу до 2025-01-31" in overview.text
-    assert "неполные данные" in overview.text
+    assert "только загруженный период" in overview.text
     assert client.post("/prices", data={"csrf": csrf, "isin": "RU000A000001", "amount": "15", "as_of": "2025-01-31"}).status_code == 303
     monkeypatch.setattr("svoibumagi.web.get_moex_share_quote", lambda isin, secid: MoexQuote(isin, secid, D("16"), date(2025, 1, 31), "https://iss.moex.com/synthetic"))
     assert client.post("/prices/moex", data={"csrf": csrf, "isin": "RU000A000001", "secid": "SYN"}).status_code == 303

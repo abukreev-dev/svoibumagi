@@ -2,7 +2,14 @@
 {% block title %}Обзор — Свои бумаги{% endblock %}
 {% block content %}
 {% if error %}<p class="error">{{ error }}</p>{% endif %}
-<p class="warn">Экспериментальная версия. Проверяйте каждую загрузку и сверку; неполные данные не означают нулевую стоимость.</p>
+<div class="page-heading"><div><p class="eyebrow">Личный кабинет</p><h2>Портфель</h2><p>Позиции и выплаты из загруженных отчётов. Дата и источник каждой оценки указаны рядом с числом.</p></div><a class="text-link" href="/analytics">Открыть аналитику →</a></div>
+<div class="summary-grid">
+  <article class="summary-card"><span>Известная стоимость</span><strong>{% if estimate.no_reports %}—{% else %}{{ known_total | default(0) | rub }} ₽{% endif %}</strong><small>{% if estimate.incomplete %}Бумаги и деньги; полный итог не подтверждён{% else %}На {{ estimate.as_of }}{% endif %}</small></article>
+  <article class="summary-card"><span>Деньги по отчётам</span><strong>{% if estimate.no_reports %}—{% else %}{{ known_cash | default(0) | rub }} ₽{% endif %}</strong><small>Последние доступные остатки в рублях</small></article>
+  <article class="summary-card"><span>Позиций</span><strong>{{ estimate.positions | selectattr('quantity', 'ne', 0) | list | length }}</strong><small>По последним загруженным отчётам</small></article>
+  <article class="summary-card"><span>Доходность XIRR</span><strong>{% if combined.xirr is not none %}{{ (combined.xirr * 100) | round(2) }} %{% else %}Пока нет данных{% endif %}</strong><small>{% if combined.xirr is none %}Нужна полная история и сверка{% else %}На {{ combined.as_of }}{% endif %}</small></article>
+</div>
+{% if estimate.incomplete %}<p class="notice">Показана известная часть портфеля. Некоторые отчёты, цены или проверки отсутствуют. Детали ниже помогают исправить конкретные пробелы.</p>{% endif %}
 <section>
   <h2>Счета</h2>
   <form method="post" action="/accounts">
@@ -12,13 +19,13 @@
     <select name="kind"><option value="brokerage">Брокерский счёт</option><option value="iis">ИИС</option></select>
     <button>Добавить</button>
   </form>
-  <ul>{% for account in accounts %}<li>{% if account.account_number %}{{ account.account_number }}{% elif account.account_number_conflict %}Номер счёта неоднозначен{% else %}Номер счёта пока неизвестен{% endif %} — {{ account.name }}, {{ account.broker }}, {{ account.kind }}{% if account.id in deletable_accounts %}<form method="post" action="/accounts/{{ account.id }}/delete"><input type="hidden" name="csrf" value="{{ csrf }}"><button>Удалить пустой счёт</button></form>{% endif %}</li>{% else %}<li>Пока нет счетов.</li>{% endfor %}</ul>
+  <ul>{% for account in accounts %}<li>{% if account.account_number %}{{ account.account_number }}{% elif account.account_number_conflict %}Номер счёта неоднозначен{% else %}Номер счёта пока неизвестен{% endif %} — {{ account.name }}, {{ account.broker | broker_ru }}, {{ account.kind | kind_ru }}{% if account.id in deletable_accounts %}<form method="post" action="/accounts/{{ account.id }}/delete"><input type="hidden" name="csrf" value="{{ csrf }}"><button>Удалить пустой счёт</button></form>{% endif %}</li>{% else %}<li>Пока нет счетов.</li>{% endfor %}</ul>
 </section>
 <section>
   <h2>Загрузить отчёт</h2>
   <form method="post" action="/imports" enctype="multipart/form-data">
     <input type="hidden" name="csrf" value="{{ csrf }}">
-    <select name="account_id" required>{% for account in accounts %}<option value="{{ account.id }}">{{ account.account_number or ('номер неоднозначен' if account.account_number_conflict else 'номер неизвестен') }} — {{ account.name }} ({{ account.broker }})</option>{% endfor %}</select>
+    <select name="account_id" required>{% for account in accounts %}<option value="{{ account.id }}">{{ account.account_number or ('номер неоднозначен' if account.account_number_conflict else 'номер неизвестен') }} — {{ account.name }} ({{ account.broker | broker_ru }})</option>{% endfor %}</select>
     <input type="file" name="report" accept=".html,.htm,.xls,.xlsx" required>
     <button {% if not accounts %}disabled{% endif %}>Открыть предпросмотр</button>
   </form>
@@ -28,9 +35,9 @@
   <h2>Расчёты по счетам</h2>
   {% if combined.xirr is not none %}
     <p class="ok">Общий портфель на {{ combined.as_of }}: {{ combined.terminal }} ₽; XIRR {{ combined.xirr * 100 }} %.</p>
-    {% if combined.status != 'available' %}<p class="warn">Себестоимость и реализованный результат общего портфеля недоступны: {{ combined.reasons | join('; ') }}.</p>{% endif %}
+    {% if combined.status != 'available' %}<p class="warn">Себестоимость и реализованный результат общего портфеля недоступны: {{ combined.reasons | map('reason_ru') | join('; ') }}.</p>{% endif %}
     <p>Выплаты по общему журналу до {{ combined.as_of }}: дивиденды с известным удержанием {{ combined.income.dividend_gross_known }} ₽; дивиденды без суммы удержания {{ combined.income.dividend_tax_unknown }} ₽; чистые ручные дивиденды {{ combined.income.dividend_net }} ₽; купоны {{ combined.income.coupon }} ₽; НКД по сделкам со знаком {{ combined.income.accrued_interest_net }} ₽; купоны с учётом НКД {{ combined.income.coupon_net_of_accrued_interest }} ₽; удержанный налог {{ combined.income.tax_withheld }} ₽; комиссии по денежным строкам {{ combined.income.fees_paid_cash }} ₽.</p>
-  {% else %}<p class="warn">Общий XIRR недоступен: {{ combined.reasons | join('; ') }}.</p>{% endif %}
+  {% else %}<p class="notice">Доходность XIRR пока не рассчитана: {{ combined.reasons | map('reason_ru') | join('; ') }}</p>{% endif %}
   {% for metric in metrics %}
     <h3>{{ metric.account.account_number or ('Номер неоднозначен' if metric.account.account_number_conflict else 'Номер неизвестен') }} — {{ metric.account.name }} — {{ metric.as_of or 'нет отчёта' }}</h3>
     {% if metric.status == 'available' %}
@@ -39,7 +46,7 @@
       {% if metric.inferred_zero_count %}<p class="warn">Для {{ metric.inferred_zero_count }} отсутствующих строк позиций нулевой остаток выведен из подтверждённой полной истории операций. Сверка самих отчётов остаётся недоступной.</p>{% endif %}
     {% else %}
       <p class="warn">Полный расчёт пока недоступен.</p>
-      <ul>{% for reason in metric.reasons %}<li>{{ reason }}</li>{% endfor %}</ul>
+      <ul>{% for reason in metric.reasons | unique %}<li>{{ reason | reason_ru }}</li>{% endfor %}</ul>
       {% if metric.xirr is not none %}<p class="ok">XIRR по полному денежному потоку доступен: {{ metric.xirr * 100 }} %. Комиссии уже отражены в денежном остатке; себестоимость партий FIFO и реализованный результат остаются недоступны.</p>{% endif %}
     {% endif %}
     {% if metric.in_kind_transfer_flows %}
@@ -47,7 +54,7 @@
       <ul>{% for day, amount in metric.in_kind_transfer_flows %}<li>{{ day }}: {{ amount }} ₽</li>{% endfor %}</ul>
     {% endif %}
     {% if metric.as_of %}
-      <p>Выплаты и удержания по проведённому журналу до {{ metric.as_of }}{% if metric.status != 'available' %} — неполные данные{% endif %}:</p>
+      <p>Выплаты и удержания по проведённому журналу до {{ metric.as_of }}{% if metric.status != 'available' %} (только загруженный период; итог за всё время не подтверждён){% endif %}:</p>
       <ul>
         <li>Дивиденды с известным удержанием, начислено: {{ metric.income.dividend_gross_known }} ₽</li>
         <li>Дивиденды без суммы удержания в источнике: {{ metric.income.dividend_tax_unknown }} ₽</li>
@@ -110,8 +117,8 @@
   {% if estimate.stale_position_accounts %}<p class="warn">Для {{ estimate.stale_position_accounts }} счетов последний отчёт старше даты оценки. Количество бумаг после отчёта не подтверждено.</p>{% endif %}
   {% if estimate.mixed_report_dates %}<p class="warn">Последние отчёты счетов заканчиваются в разные даты ({{ estimate.report_dates | join(', ') }}). Общая сумма по этим позициям не является оценкой портфеля на одну дату.</p>{% endif %}
   <p><small>Количество взято из последнего отчёта каждого счёта, завершившегося не позже выбранной даты. На точную дату отчёта используется его итоговая оценка позиции; ручная цена на эту же дату имеет приоритет. Для других дат берётся последняя доступная цена. Цена старше {{ estimate.max_price_age_days }} календарных дней показана с источником и датой, но не включена в известную стоимость. Денежные остатки показаны отдельно. Оценка не заменяет сверку операций.</small></p>
-  <div class="scroll"><table><tr><th>Счёт</th><th>Инструмент</th><th>Количество</th><th>Дата позиции</th><th>Цена и дата</th><th>Стоимость</th></tr>
-  {% for row in estimate.positions %}<tr><td>{{ row.account.account_number or ('Номер неоднозначен' if row.account.account_number_conflict else 'Номер неизвестен') }} — {{ row.account.name }}</td><td>{{ row.name }}<br><small>{{ row.isin or 'ISIN неизвестен' }}</small></td><td>{{ row.quantity }} {{ row.currency }}</td><td>{{ row.report_date }}</td><td>{% if row.price_status == 'broker_report' %}Итоговая оценка брокера · {{ row.report_date }}{% elif row.price %}{{ row.price.amount }} ₽ · {{ row.price.as_of }} · {{ row.price.source }}{% if row.price_status == 'stale' %} · устарела{% endif %}{% else %}—{% endif %}</td><td>{{ row.value if row.value is not none else ('Нужна конвертация' if row.price_status == 'currency_conversion_required' else 'Неизвестна') }}</td></tr>{% endfor %}
+  <div class="scroll"><table><tr><th>Счёт</th><th>Инструмент</th><th>Количество, шт.</th><th>Дата позиции</th><th>Цена или источник оценки</th><th>Стоимость, ₽</th></tr>
+  {% for row in estimate.positions %}<tr><td>{{ row.account.account_number or ('Номер неоднозначен' if row.account.account_number_conflict else 'Номер неизвестен') }} — {{ row.account.name }}</td><td>{{ row.name }}<br><small>{{ row.isin or 'ISIN неизвестен' }}</small></td><td>{{ row.quantity }}</td><td>{{ row.report_date }}</td><td>{% if row.price_status == 'broker_report' %}Итоговая стоимость из отчёта брокера · {{ row.report_date }}; цена одной бумаги не указана{% elif row.price %}{{ row.price.amount }} ₽ за бумагу · {{ row.price.as_of }} · {{ row.price.source | price_source_ru }}{% if row.price_status == 'stale' %} · устарела{% endif %}{% else %}—{% endif %}</td><td>{{ row.value | rub if row.value is not none else ('Нужна конвертация' if row.price_status == 'currency_conversion_required' else 'Неизвестна') }}</td></tr>{% endfor %}
   </table></div>
   <h3>Ручная цена</h3>
   <form method="post" action="/prices">
@@ -175,7 +182,7 @@
 <section>
   <h2>История загрузок</h2>
   <div class="scroll"><table><tr><th>№</th><th>Файл</th><th>Период</th><th>Состояние</th></tr>
-  {% for attempt in attempts %}<tr><td><a href="/imports/{{ attempt.id }}">{{ attempt.id }}</a></td><td>{{ attempt.original_name }}</td><td>{{ attempt.period_start }} — {{ attempt.period_end }}</td><td>{{ attempt.state }}</td></tr>{% endfor %}
+  {% for attempt in attempts %}<tr><td><a href="/imports/{{ attempt.id }}">{{ attempt.id }}</a></td><td>{{ attempt.original_name }}</td><td>{{ attempt.period_start }} — {{ attempt.period_end }}</td><td>{{ attempt.state | import_state_ru }}</td></tr>{% endfor %}
   </table></div>
   <p><a href="/imports">Открыть всю историю загрузок</a></p>
 </section>

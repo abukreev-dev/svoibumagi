@@ -8,7 +8,7 @@
 </form>
 <p>Всего попыток: {{ total }}. Страница {{ page }}.</p>
 <div class="scroll"><table><tr><th>№</th><th>Номер договора/счёта</th><th>Локальный счёт</th><th>Файл</th><th>Период</th><th>Состояние</th></tr>
-{% for attempt in attempts %}<tr><td><a href="/imports/{{ attempt.id }}">{{ attempt.id }}</a></td><td>{{ attempt.account_number or '—' }}</td><td>{{ attempt.account_name }}</td><td>{{ attempt.original_name }}</td><td>{{ attempt.period_start }} — {{ attempt.period_end }}</td><td>{{ attempt.state }}</td></tr>
+{% for attempt in attempts %}<tr><td><a href="/imports/{{ attempt.id }}">{{ attempt.id }}</a></td><td>{{ attempt.account_number or '—' }}</td><td>{{ attempt.account_name }}</td><td>{{ attempt.original_name }}</td><td>{{ attempt.period_start }} — {{ attempt.period_end }}</td><td>{{ attempt.state | import_state_ru }}</td></tr>
 {% else %}<tr><td colspan="6">На этой странице загрузок нет.</td></tr>{% endfor %}
 </table></div>
 <p>

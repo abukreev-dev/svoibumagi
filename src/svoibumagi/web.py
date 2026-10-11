@@ -18,15 +18,26 @@ from jinja2 import Environment, PackageLoader, select_autoescape
 from starlette.background import BackgroundTask
 
 from .auth import verify_password
+from .analytics import TABS, build_analytics
 from .backup import create_backup
 from .exports import gaps_csv, metrics_csv, operations_csv, positions_csv, rub_text, valuations_csv
 from .metrics import evaluate_combined
+from .locale_ru import ACCOUNT_KINDS, BROKERS, CASH_KINDS, CHECK_KINDS, EVENT_TYPES, IMPORT_STATES, PRICE_SOURCES, STATUSES, reason_ru
 from .prices import find_moex_security, get_moex_bond_price, get_moex_share_close, get_moex_share_quote, resolve_moex_quote
 from .storage import MAX_UPLOAD_BYTES, Storage
 
 
 TEMPLATES = Environment(loader=PackageLoader("svoibumagi", "templates"), autoescape=select_autoescape(["html"]))
 TEMPLATES.filters["rub"] = rub_text
+TEMPLATES.filters["reason_ru"] = reason_ru
+TEMPLATES.filters["broker_ru"] = lambda value: BROKERS.get(value, value)
+TEMPLATES.filters["kind_ru"] = lambda value: ACCOUNT_KINDS.get(value, value)
+TEMPLATES.filters["import_state_ru"] = lambda value: IMPORT_STATES.get(value, value)
+TEMPLATES.filters["status_ru"] = lambda value: STATUSES.get(value, value)
+TEMPLATES.filters["event_type_ru"] = lambda value: EVENT_TYPES.get(value, value)
+TEMPLATES.filters["cash_kind_ru"] = lambda value: CASH_KINDS.get(value, value)
+TEMPLATES.filters["check_kind_ru"] = lambda value: CHECK_KINDS.get(value, value)
+TEMPLATES.filters["price_source_ru"] = lambda value: PRICE_SOURCES.get(value, value)
 
 
 def pending_idle_gaps(metrics: list[dict], confirmations: dict[int, list[dict]]) -> dict[int, list[dict]]:
@@ -101,11 +112,17 @@ def create_app(data_dir: Path, password_hash: str, *, secure_cookie: bool = True
 
     def home_context(csrf: str, error: str | None = None, as_of: date | None = None) -> dict:
         metrics = storage.financial_metrics(as_of)
+        snapshots = storage.latest_snapshots(as_of)
+        estimate = storage.portfolio_estimate(as_of)
+        cash_rows = [row for snapshot in snapshots for row in snapshot["cash_snapshots"]
+                     if row["currency"] == "RUB"]
+        known_cash = sum((Decimal(row["end_amount"]) for row in cash_rows), Decimal(0))
         inactive_periods = {metric["account"]["id"]: storage.list_inactive_periods(metric["account"]["id"])
                             for metric in metrics}
         return {"csrf": csrf, "accounts": storage.list_accounts(),
                 "deletable_accounts": storage.deletable_account_ids(), "attempts": storage.list_attempts(limit=30),
-                "snapshots": storage.latest_snapshots(), "estimate": storage.portfolio_estimate(as_of),
+                "snapshots": snapshots, "estimate": estimate, "known_cash": known_cash,
+                "known_total": known_cash + estimate["known_securities_subtotal"],
                 "metrics": metrics, "combined": evaluate_combined(metrics),
                 "inactive_periods": inactive_periods,
                 "pending_idle_gaps": pending_idle_gaps(metrics, inactive_periods),
@@ -152,6 +169,21 @@ def create_app(data_dir: Path, password_hash: str, *, secure_cookie: bool = True
         if not csrf:
             return render("landing.html", logged_in=False)
         return render("home.html", **home_context(csrf, as_of=valuation_date(request)))
+
+    @app.get("/analytics", response_class=HTMLResponse)
+    async def analytics_page(request: Request):
+        csrf = require(request)
+        view = request.query_params.get("view", "value")
+        if view not in {key for key, _ in TABS}:
+            raise HTTPException(status_code=404, detail="Неизвестный раздел аналитики")
+        as_of = valuation_date(request)
+        estimate = storage.portfolio_estimate(as_of)
+        metrics = storage.financial_metrics(as_of)
+        combined = evaluate_combined(metrics)
+        data = build_analytics(estimate, storage.list_events(), estimate["as_of"],
+                               storage.latest_snapshots(as_of))
+        return render("analytics.html", csrf=csrf, view=view, estimate=estimate,
+                      metrics=metrics, combined=combined, data=data)
 
     @app.post("/accounts")
     async def add_account(request: Request):

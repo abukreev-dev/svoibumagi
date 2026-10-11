@@ -1,17 +1,17 @@
 {% extends "base.html" %}
 {% block title %}Проверка импорта — Свои бумаги{% endblock %}
 {% block content %}
-<h2>Импорт №{{ attempt_id }} — {{ review.state }}</h2>
+<h2>Импорт №{{ attempt_id }} — {{ review.state | import_state_ru }}</h2>
 {% if error %}<p class="error">{{ error }}</p>{% endif %}
-<p>{{ review.preview.broker }}, вариант {{ review.preview.variant }}, период {{ review.preview.period_start }} — {{ review.preview.period_end }}.</p>
-<p>Выбран локальный счёт №{{ review.selected_account.id }} «{{ review.selected_account.name }}» ({{ review.selected_account.kind }}). Номер договора/счёта в исходном отчёте: <strong>{{ review.preview.account_number or 'недоступен для этой загрузки' }}</strong>{% if review.preview.account_kind %}; тип в отчёте: {{ review.preview.account_kind }}{% endif %}. Проверьте принадлежность перед подтверждением.</p>
+<p>{{ review.preview.broker | broker_ru }}, вариант {{ review.preview.variant }}, период {{ review.preview.period_start }} — {{ review.preview.period_end }}.</p>
+<p>Выбран локальный счёт №{{ review.selected_account.id }} «{{ review.selected_account.name }}» ({{ review.selected_account.kind | kind_ru }}). Номер договора/счёта в исходном отчёте: <strong>{{ review.preview.account_number or 'недоступен для этой загрузки' }}</strong>{% if review.preview.account_kind %}; тип в отчёте: {{ review.preview.account_kind | kind_ru }}{% endif %}. Проверьте принадлежность перед подтверждением.</p>
 {% for warning in review.preview.warnings %}<p class="warn">{{ warning }}</p>{% endfor %}
 {% if review.requires_restage %}<p class="warn">Эта ожидающая загрузка создана старой версией адаптера. Удалите её ниже и загрузите исходный файл заново: классификация исходных строк должна попасть в предпросмотр.</p>{% endif %}
 <p>Сделок для журнала: {{ review.preview.trades | length }}; сделок без ID для сверки: {{ review.preview.summary_trades | default([]) | length }}; движений денег: {{ review.preview.cash_movements | length }}; строк вне проведённого журнала: {{ review.other_excluded | length }}; справочных строк инструментов: {{ review.instrument_references | length }}; служебных строк структуры: {{ review.structural_rows | length }}; строк брокерских итогов: {{ review.total_rows | length }}; неизвестных строк: {{ review.preview.unparsed | length }}.</p>
 <section>
   <h3>Сверка</h3>
   <div class="scroll"><table><tr><th>Вид</th><th>Объект</th><th>Расчёт</th><th>В отчёте</th><th>Разница</th><th>Статус</th></tr>
-  {% for check in review.preview.checks %}<tr><td>{{ check.kind }}</td><td>{{ check.key }}</td><td>{{ check.calculated if check.calculated is not none else '—' }}</td><td>{{ check.reported if check.reported is not none else '—' }}</td><td>{{ check.difference if check.difference is not none else '—' }}</td><td class="{% if check.status == 'matched' %}ok{% else %}warn{% endif %}">{{ check.status }} {{ check.reason }}</td></tr>{% endfor %}
+  {% for check in review.preview.checks %}<tr><td>{{ check.kind | check_kind_ru }}</td><td>{{ check.key }}</td><td>{{ check.calculated if check.calculated is not none else '—' }}</td><td>{{ check.reported if check.reported is not none else '—' }}</td><td>{{ check.difference if check.difference is not none else '—' }}</td><td class="{% if check.status == 'matched' %}ok{% else %}warn{% endif %}">{{ check.status | status_ru }}{% if check.reason %}: {{ check.reason | reason_ru }}{% endif %}</td></tr>{% endfor %}
   </table></div>
 </section>
 <section>
@@ -56,12 +56,12 @@
   <h3>Операции в предпросмотре</h3>
   <div class="scroll"><table><tr><th>Источник</th><th>Дата</th><th>Тип</th><th>Инструмент/ссылка</th><th>Количество</th><th>Сумма</th><th>Совпадение</th></tr>
   {% for trade in review.preview.trades %}<tr><td>{{ trade.location.sheet }}:{{ trade.location.row }}</td><td>{{ trade.traded_at }}</td><td>Сделка</td><td>{{ trade.name }} / {{ trade.isin }}</td><td>{{ trade.quantity }}</td><td>{{ trade.amount }}</td><td>Проверить ниже</td></tr>{% endfor %}
-  {% for movement in review.preview.cash_movements %}<tr><td>{{ movement.location.sheet }}:{{ movement.location.row }}</td><td>{{ movement.date }}</td><td>{{ movement.kind }}</td><td>{{ movement.broker_trade_id or '—' }}</td><td>—</td><td>{{ movement.amount }}</td><td>Проверить ниже</td></tr>{% endfor %}
+  {% for movement in review.preview.cash_movements %}<tr><td>{{ movement.location.sheet }}:{{ movement.location.row }}</td><td>{{ movement.date }}</td><td>{{ movement.kind | cash_kind_ru }}</td><td>{{ movement.broker_trade_id or '—' }}</td><td>—</td><td>{{ movement.amount }}</td><td>Проверить ниже</td></tr>{% endfor %}
   </table></div>
 </section>
 <section>
   <h3>Проверка повторов</h3>
-  <div class="scroll"><table><tr><th>Строка</th><th>Статус</th></tr>{% for item in review.event_candidates %}<tr><td>{{ item.key }}</td><td>{{ item.status }}</td></tr>{% endfor %}</table></div>
+  <div class="scroll"><table><tr><th>Строка</th><th>Статус</th></tr>{% for item in review.event_candidates %}<tr><td>{{ item.key }}</td><td>{{ item.status | status_ru }}</td></tr>{% endfor %}</table></div>
 </section>
 {% if review.state == 'awaiting_review' %}
 <section>

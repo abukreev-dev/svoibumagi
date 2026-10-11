@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Аналитика — Свои бумаги{% endblock %}
+{% block content %}
+<div class="page-heading"><div><p class="eyebrow">Отчёты</p><h2>Аналитика портфеля</h2><p>Данные проведённых отчётов и журнала на {{ estimate.as_of or 'выбранную дату' }}.</p></div></div>
+<form method="get" action="/analytics" class="date-picker">
+  <input type="hidden" name="view" value="{{ view }}">
+  <label>Дата оценки <input type="date" name="as_of" value="{{ estimate.as_of or '' }}" required></label>
+  <button>Показать</button>
+</form>
+<nav class="analytics-tabs" aria-label="Разделы аналитики">
+  {% for key, label in data.tabs %}<a href="/analytics?view={{ key }}{% if estimate.as_of %}&amp;as_of={{ estimate.as_of }}{% endif %}" {% if key == view %}aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}
+</nav>
+{% if view == 'value' %}
+<section><h3>Стоимость портфеля</h3>
+  <p class="metric-large">{% if estimate.no_reports %}—{% else %}{{ data.known_total | rub }} ₽{% endif %}</p>
+  <p>Известная стоимость бумаг: {{ data.priced_total | rub }} ₽; денежные остатки из отчётов: {{ data.known_cash | rub }} ₽.</p>
+  {% if estimate.incomplete %}<p class="notice">Это сумма позиций с известной оценкой, а не подтверждённая стоимость всего портфеля. Позиций без цены: {{ data.unpriced_positions }}. Дата последнего отчёта и дата оценки могут различаться.</p>{% else %}<p>Стоимость бумаг на {{ estimate.as_of }} по подтверждённым данным.</p>{% endif %}
+  <div class="scroll"><table><tr><th>Счёт</th><th>Бумага</th><th>Количество, шт.</th><th>Стоимость, ₽</th><th>Источник</th></tr>
+  {% for row in estimate.positions if row.quantity != 0 %}<tr><td>{{ row.account.account_number or row.account.name }}</td><td>{{ row.name }}<br><small>{{ row.isin or 'Без ISIN' }}</small></td><td>{{ row.quantity }}</td><td>{{ row.value | rub if row.value is not none else 'Нет цены' }}</td><td>{% if row.price_status == 'broker_report' %}Отчёт брокера · {{ row.report_date }}{% elif row.price %}{{ row.price.source | price_source_ru }} · {{ row.price.as_of }}{% else %}Нет подтверждённой оценки{% endif %}</td></tr>{% else %}<tr><td colspan="5">Позиции пока не загружены.</td></tr>{% endfor %}</table></div>
+</section>
+{% elif view == 'profit' %}
+<section><h3>Прибыль портфеля</h3>
+  {% if combined.status == 'available' %}<p class="metric-large">{{ combined.realized | rub }} ₽</p><p>Реализованный результат FIFO. Выплаты и текущая переоценка показаны отдельно: они не включены в эту сумму.</p>
+  {% else %}<p class="notice">Подтверждённую прибыль пока нельзя вычислить: нужны партии покупок с открытия счетов, полная сверка и цены. Ниже показаны только записанные денежные выплаты и удержания за загруженный период.</p>{% endif %}
+  <div class="scroll"><table><tr><th>Год</th><th>Дивиденды, ₽</th><th>Купоны, ₽</th><th>Налоги, ₽</th><th>Комиссии, ₽</th></tr>
+  {% for year, values in data.annual %}<tr><td>{{ year }}</td><td>{{ values.get('Дивиденды', 0) | rub }}</td><td>{{ values.get('Купоны', 0) | rub }}</td><td>{{ values.get('Налоги', 0) | rub }}</td><td>{{ values.get('Комиссии', 0) | rub }}</td></tr>{% else %}<tr><td colspan="5">Выплат в журнале нет.</td></tr>{% endfor %}</table></div>
+</section>
+{% elif view == 'return' %}
+<section><h3>Доходность</h3>
+  {% if combined.xirr is not none %}<p class="metric-large">{{ (combined.xirr * 100) | round(2) }} %</p><p>XIRR по внешним денежным потокам и полной оценке на {{ combined.as_of }}.</p>
+  {% else %}<p class="notice">XIRR пока не подтверждён: {{ combined.reasons | map('reason_ru') | join('; ') }}</p><p>Для расчёта нужны отчёты с открытия счетов, разбор пропусков и стоимость всех позиций на одну дату.</p>{% endif %}
+  <div class="scroll"><table><tr><th>Счёт</th><th>Дата отчёта</th><th>XIRR</th></tr>{% for metric in metrics %}<tr><td>{{ metric.account.account_number or metric.account.name }}</td><td>{{ metric.as_of or '—' }}</td><td>{% if metric.xirr is not none %}{{ (metric.xirr * 100) | round(2) }} %{% else %}Недоступен{% endif %}</td></tr>{% endfor %}</table></div>
+</section>
+{% elif view == 'benchmark' %}
+<section><h3>Бенчмаркинг</h3><p class="notice">Сравнение с индексом пока недоступно. Для честного сравнения нужны подтверждённая история стоимости портфеля по датам, индекс и единые правила учёта пополнений.</p></section>
+{% elif view == 'instruments' %}
+<section><h3>Эффективность бумаг</h3><p class="notice">Прибыль по отдельным бумагам пока не подтверждена: в первом загруженном отчёте уже есть открытые позиции без цены покупки. Ниже доступны количество и известная оценка без выдуманной доходности.</p>
+  <div class="scroll"><table><tr><th>Бумага</th><th>Количество, шт.</th><th>Известная стоимость, ₽</th></tr>
+  {% for item in data.weights %}<tr><td>{{ item.name }}<br><small>{{ item.isin or 'Без ISIN' }}</small></td><td>{{ item.quantity }}</td><td>{{ item.value | rub }}</td></tr>{% else %}<tr><td colspan="3">Нет оценённых позиций.</td></tr>{% endfor %}</table></div>
+</section>
+{% elif view == 'diversification' %}
+<section><h3>Диверсификация</h3>{% if estimate.incomplete %}<p class="notice">Доли рассчитаны только среди положительных позиций с известной стоимостью: {{ data.known_positions }}. Их нельзя считать долями полного портфеля.</p>{% endif %}
+  <div class="scroll"><table><tr><th>Бумага</th><th>Стоимость, ₽</th><th>Доля известной стоимости</th></tr>
+  {% for item in data.weights %}<tr><td>{{ item.name }}</td><td>{{ item.value | rub }}</td><td>{{ item.share | round(2) }} %</td></tr>{% else %}<tr><td colspan="3">Нет оценённых позиций.</td></tr>{% endfor %}</table></div>
+</section>
+{% elif view == 'map' %}
+<section><h3>Карта портфеля</h3>{% if estimate.incomplete %}<p class="notice">Карта охватывает только положительные позиции с известной стоимостью. Размер блока — доля среди них.</p>{% endif %}
+  <div class="portfolio-map">{% for item in data.weights %}<div class="map-tile" style="flex-grow: {{ (item.share * 10) | round(0) }}"><strong>{{ item.name }}</strong><span>{{ item.share | round(1) }} %</span><small>{{ item.value | rub }} ₽</small></div>{% else %}<p>Нет оценённых позиций.</p>{% endfor %}</div>
+</section>
+{% elif view == 'multiples' %}
+<section><h3>Мультипликаторы</h3><p class="notice">Отчёты брокеров не содержат P/E, P/BV и другие фундаментальные показатели. Нужен отдельный источник с датой, методикой и правом использования данных. Сейчас сервис не подставляет неподтверждённые значения.</p></section>
+{% elif view == 'cashflow' %}
+<section><h3>Денежный поток</h3><p>Движения по проведённому журналу, сгруппированные по месяцам. Знаки сохранены из операций брокера; сделки и внутренние переводы в этой таблице не показаны.</p>
+  <div class="scroll"><table><tr><th>Месяц</th><th>Пополнения, ₽</th><th>Выводы, ₽</th><th>Дивиденды, ₽</th><th>Купоны, ₽</th><th>Налоги, ₽</th><th>Комиссии, ₽</th></tr>
+  {% for month, values in data.monthly %}<tr><td>{{ month }}</td><td>{{ values.get('Пополнения', 0) | rub }}</td><td>{{ values.get('Выводы', 0) | rub }}</td><td>{{ values.get('Дивиденды', 0) | rub }}</td><td>{{ values.get('Купоны', 0) | rub }}</td><td>{{ values.get('Налоги', 0) | rub }}</td><td>{{ values.get('Комиссии', 0) | rub }}</td></tr>{% else %}<tr><td colspan="7">Денежных операций пока нет.</td></tr>{% endfor %}</table></div>
+</section>
+{% endif %}
+{% endblock %}
