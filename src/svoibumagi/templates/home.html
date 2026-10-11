@@ -1,16 +1,95 @@
 {% extends "base.html" %}
+{% set active_nav = "portfolio" %}
 {% block title %}Обзор — Свои бумаги{% endblock %}
 {% block content %}
 {% if error %}<p class="error">{{ error }}</p>{% endif %}
 <div class="page-heading"><div><p class="eyebrow">Личный кабинет</p><h2>Портфель</h2><p>Позиции и выплаты из загруженных отчётов. Дата и источник каждой оценки указаны рядом с числом.</p></div><a class="text-link" href="/analytics">Открыть аналитику →</a></div>
 <div class="summary-grid">
-  <article class="summary-card"><span>Известная стоимость</span><strong>{% if estimate.no_reports %}—{% else %}{{ known_total | default(0) | rub }} ₽{% endif %}</strong><small>{% if estimate.incomplete %}Бумаги и деньги; полный итог не подтверждён{% else %}На {{ estimate.as_of }}{% endif %}</small></article>
-  <article class="summary-card"><span>Деньги по отчётам</span><strong>{% if estimate.no_reports %}—{% else %}{{ known_cash | default(0) | rub }} ₽{% endif %}</strong><small>Последние доступные остатки в рублях</small></article>
+  <article class="summary-card"><span>Известная стоимость</span><strong>{% if estimate.no_reports %}—{% else %}{{ known_total | default(0) | rub_ui }} ₽{% endif %}</strong><small>{% if estimate.incomplete %}Бумаги и деньги; полный итог не подтверждён{% else %}На {{ estimate.as_of }}{% endif %}</small></article>
+  <article class="summary-card"><span>Деньги по отчётам</span><strong>{% if estimate.no_reports %}—{% else %}{{ known_cash | default(0) | rub_ui }} ₽{% endif %}</strong><small>Последние доступные остатки в рублях</small></article>
   <article class="summary-card"><span>Позиций</span><strong>{{ estimate.positions | selectattr('quantity', 'ne', 0) | list | length }}</strong><small>По последним загруженным отчётам</small></article>
   <article class="summary-card"><span>Доходность XIRR</span><strong>{% if combined.xirr is not none %}{{ (combined.xirr * 100) | round(2) }} %{% else %}Пока нет данных{% endif %}</strong><small>{% if combined.xirr is none %}Нужна полная история и сверка{% else %}На {{ combined.as_of }}{% endif %}</small></article>
 </div>
 {% if estimate.incomplete %}<p class="notice">Показана известная часть портфеля. Некоторые отчёты, цены или проверки отсутствуют. Детали ниже помогают исправить конкретные пробелы.</p>{% endif %}
 <div class="home-sections">
+<section class="wide">
+  <h2>Оценка бумаг</h2>
+  <form method="get" action="/">
+    <label>Дата расчёта и оценки <input type="date" name="as_of" max="{{ today }}" value="{{ estimate.as_of or today }}" required></label>
+    <button>Показать</button>
+  </form>
+  <small>FIFO и XIRR рассчитываются на выбранную дату только при наличии отчёта с конечным остатком на эту дату. Оценка бумаг может показать известную часть по более раннему отчёту со статусом неполноты.</small>
+  {% if estimate.no_reports %}<p class="warn">Оценка недоступна: пока нет проведённых отчётов с позициями.</p>
+  {% else %}<p>Известная стоимость бумаг на {{ estimate.as_of or 'не задана' }}: {{ estimate.known_securities_subtotal }} ₽.
+  {% if estimate.incomplete %}<strong class="warn">Оценка неполная; позиций без цены: {{ estimate.missing_prices }}; с ценой старше {{ estimate.max_price_age_days }} дней: {{ estimate.stale_prices }}; без подтверждённой конвертации валюты: {{ estimate.conversion_required }}.</strong>{% endif %}</p>{% endif %}
+  {% if estimate.missing_accounts %}<p class="warn">Для {{ estimate.missing_accounts }} счетов нет подтверждённого отчёта на выбранную дату или ранее.</p>{% endif %}
+  {% if estimate.stale_position_accounts %}<p class="warn">Для {{ estimate.stale_position_accounts }} счетов последний отчёт старше даты оценки. Количество бумаг после отчёта не подтверждено.</p>{% endif %}
+  {% if estimate.mixed_report_dates %}<p class="warn">Последние отчёты счетов заканчиваются в разные даты ({{ estimate.report_dates | join(', ') }}). Общая сумма по этим позициям не является оценкой портфеля на одну дату.</p>{% endif %}
+  <p><small>Количество взято из последнего отчёта каждого счёта, завершившегося не позже выбранной даты. На точную дату отчёта используется его итоговая оценка позиции; ручная цена на эту же дату имеет приоритет. Для других дат берётся последняя доступная цена. Цена старше {{ estimate.max_price_age_days }} календарных дней показана с источником и датой, но не включена в известную стоимость. Денежные остатки показаны отдельно. Оценка не заменяет сверку операций.</small></p>
+  <div class="scroll"><table><tr><th>Счёт</th><th>Инструмент</th><th>Количество, шт.</th><th>Дата позиции</th><th>Цена или источник оценки</th><th>Стоимость, ₽</th></tr>
+  {% for row in estimate.positions %}<tr><td>{{ row.account.account_number or ('Номер неоднозначен' if row.account.account_number_conflict else 'Номер неизвестен') }} — {{ row.account.name }}</td><td>{{ row.name }}<br><small>{{ row.isin or 'ISIN неизвестен' }}</small></td><td>{{ row.quantity }}</td><td>{{ row.report_date }}</td><td>{% if row.price_status == 'broker_report' %}Итоговая стоимость из отчёта брокера · {{ row.report_date }}; цена одной бумаги не указана{% elif row.price %}{{ row.price.amount }} ₽ за бумагу · {{ row.price.as_of }} · {{ row.price.source | price_source_ru }}{% if row.price_status == 'stale' %} · устарела{% endif %}{% else %}—{% endif %}</td><td>{{ row.value | rub_ui if row.value is not none else ('Нужна конвертация' if row.price_status == 'currency_conversion_required' else 'Неизвестна') }}</td></tr>{% endfor %}
+  </table></div>
+  <details><summary>Управление ценами</summary>
+  <h3>Ручная цена</h3>
+  <form method="post" action="/prices">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input name="isin" placeholder="ISIN" maxlength="12" required>
+    <input name="amount" type="number" min="0.000001" step="any" placeholder="₽ за бумагу" required>
+    <input name="as_of" type="date" max="{{ today }}" value="{{ today }}" required>
+    <input name="note" placeholder="Источник / примечание">
+    <button>Сохранить цену</button>
+  </form>
+  {% if moex_iss_enabled %}
+  <h3>Цена Мосбиржи по ISIN</h3>
+  <form method="post" action="/prices/moex/refresh">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label>Дата оценки <input name="as_of" type="date" max="{{ today }}" value="{{ estimate.as_of or today }}" required></label>
+    <button>Обновить цены всех ненулевых позиций</button>
+  </form>
+  <small>Сервис проверяет каждую бумагу по ISIN и дату котировки. Цены сохраняются вместе, только если подтверждены все бумаги. При ошибке уже сохранённые цены не меняются.</small>
+  <form method="post" action="/prices/moex/auto">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input name="isin" placeholder="ISIN бумаги" maxlength="12" required>
+    <label>Дата оценки <input name="as_of" type="date" max="{{ today }}" value="{{ estimate.as_of or today }}" required></label>
+    <button>Найти бумагу и цену</button>
+  </form>
+  <small>Для однозначно найденной акции TQBR или рублёвой облигации TQOB/TQCB сервис проверяет бумагу по ISIN и сохраняет подтверждённую цену на дату. При неоднозначном коде используйте форму с SECID ниже.</small>
+  <h3>Котировка акции Мосбиржи, TQBR</h3>
+  <form method="post" action="/prices/moex">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input name="isin" placeholder="ISIN акции" maxlength="12" required>
+    <input name="secid" placeholder="SECID, например SBER" maxlength="24" required>
+    <label>Дата закрытия (необязательно) <input name="as_of" type="date" max="{{ today }}"></label>
+    <button>Получить цену</button>
+  </form>
+  <small>Без даты сервис сохраняет последнюю сделку. С датой берёт последнее закрытие TQBR за семь календарных дней до неё и проверяет SECID, ISIN, валюту и дату.</small>
+  <h3>Историческая цена облигации Мосбиржи</h3>
+  <form method="post" action="/prices/moex/bond">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input name="isin" placeholder="ISIN облигации" maxlength="12" required>
+    <input name="secid" placeholder="SECID облигации" maxlength="24" required>
+    <select name="board"><option value="TQOB">TQOB</option><option value="TQCB">TQCB</option></select>
+    <label>Дата оценки <input name="as_of" type="date" max="{{ today }}" value="{{ estimate.as_of or today }}" required></label>
+    <button>Получить цену с НКД</button>
+  </form>
+  <small>Рублёвая цена одной облигации = закрытие в процентах × непогашенный номинал / 100 + НКД. Сервис проверяет ISIN, режим, валюту и дату; при отсутствии нужных полей сохраняйте проверенную ручную цену.</small>
+  {% else %}
+  <p class="warn">Автоматическая загрузка цен Мосбиржи отключена в конфигурации. Для оценки можно внести цену вручную с датой и источником.</p>
+  {% endif %}
+  </details>
+</section>
+<section class="wide">
+  <h2>Последние позиции по отчётам</h2>
+  {% for snapshot in snapshots %}
+    <h3>{{ snapshot.account.account_number or ('Номер неоднозначен' if snapshot.account.account_number_conflict else 'Номер неизвестен') }} — {{ snapshot.account.name }} — {{ snapshot.period_end }}</h3>
+    {% if snapshot.unparsed or snapshot.checks | selectattr('status', 'ne', 'matched') | list %}<p class="warn">Есть неполные данные или расхождения. <a href="/imports/{{ snapshot.attempt_id }}">Проверить отчёт</a></p>{% endif %}
+    <div class="scroll"><table><tr><th>Бумага</th><th>ISIN</th><th>Количество на дату отчёта</th></tr>
+    {% for position in snapshot.positions %}<tr><td>{{ position.name }}</td><td>{{ position.isin or 'Не определён' }}</td><td>{{ position.end_quantity }}</td></tr>{% endfor %}
+    </table></div>
+  {% else %}<p>Подтверждённых отчётов пока нет.</p>{% endfor %}
+  <p>Проведённых событий: {{ event_count }}.</p>
+  <p><a href="/export/positions.csv">Выгрузить позиции CSV</a> · <a href="/export/operations.csv">Выгрузить операции CSV</a> · <a href="/export/valuations.csv{% if estimate.as_of %}?as_of={{ estimate.as_of }}{% endif %}">Выгрузить оценку CSV</a> · <a href="/export/metrics.csv">Выгрузить расчёты CSV</a> · <a href="/export/gaps.csv">Выгрузить разрывы и подтверждения CSV</a></p>
+</section>
 <section>
   <h2>Счета</h2>
   <form method="post" action="/accounts">
@@ -32,7 +111,7 @@
   </form>
   <small>Принимаются обнаруженные варианты HTML Сбера и XLS/XLSX Альфы. Файл остаётся в закрытом хранилище.</small>
 </section>
-<section>
+<section class="wide">
   <h2>Расчёты по счетам</h2>
   <details><summary>Полнота истории, расчёты и подтверждения</summary>
   {% if combined.xirr is not none %}
@@ -44,7 +123,7 @@
     <h3>{{ metric.account.account_number or ('Номер неоднозначен' if metric.account.account_number_conflict else 'Номер неизвестен') }} — {{ metric.account.name }} — {{ metric.as_of or 'нет отчёта' }}</h3>
     {% if metric.status == 'available' %}
       <p class="ok">Расчёт доступен на указанную дату. Денежный остаток: {{ metric.cash }} ₽; бумаги: {{ metric.securities }} ₽; сумма: {{ metric.terminal }} ₽.</p>
-      <p>Себестоимость открытых партий FIFO: {{ metric.cost_basis | rub }} ₽; реализованный результат: {{ metric.realized | rub }} ₽; XIRR: {{ metric.xirr * 100 }} %.</p>
+      <p>Себестоимость открытых партий FIFO: {{ metric.cost_basis | rub_ui }} ₽; реализованный результат: {{ metric.realized | rub_ui }} ₽; XIRR: {{ metric.xirr * 100 }} %.</p>
       {% if metric.inferred_zero_count %}<p class="warn">Для {{ metric.inferred_zero_count }} отсутствующих строк позиций нулевой остаток выведен из подтверждённой полной истории операций. Сверка самих отчётов остаётся недоступной.</p>{% endif %}
     {% else %}
       <p class="warn">Полный расчёт пока недоступен.</p>
@@ -107,84 +186,6 @@
   </details>
 </section>
 <section>
-  <h2>Оценка бумаг</h2>
-  <form method="get" action="/">
-    <label>Дата расчёта и оценки <input type="date" name="as_of" max="{{ today }}" value="{{ estimate.as_of or today }}" required></label>
-    <button>Показать</button>
-  </form>
-  <small>FIFO и XIRR рассчитываются на выбранную дату только при наличии отчёта с конечным остатком на эту дату. Оценка бумаг может показать известную часть по более раннему отчёту со статусом неполноты.</small>
-  {% if estimate.no_reports %}<p class="warn">Оценка недоступна: пока нет проведённых отчётов с позициями.</p>
-  {% else %}<p>Известная стоимость бумаг на {{ estimate.as_of or 'не задана' }}: {{ estimate.known_securities_subtotal }} ₽.
-  {% if estimate.incomplete %}<strong class="warn">Оценка неполная; позиций без цены: {{ estimate.missing_prices }}; с ценой старше {{ estimate.max_price_age_days }} дней: {{ estimate.stale_prices }}; без подтверждённой конвертации валюты: {{ estimate.conversion_required }}.</strong>{% endif %}</p>{% endif %}
-  {% if estimate.missing_accounts %}<p class="warn">Для {{ estimate.missing_accounts }} счетов нет подтверждённого отчёта на выбранную дату или ранее.</p>{% endif %}
-  {% if estimate.stale_position_accounts %}<p class="warn">Для {{ estimate.stale_position_accounts }} счетов последний отчёт старше даты оценки. Количество бумаг после отчёта не подтверждено.</p>{% endif %}
-  {% if estimate.mixed_report_dates %}<p class="warn">Последние отчёты счетов заканчиваются в разные даты ({{ estimate.report_dates | join(', ') }}). Общая сумма по этим позициям не является оценкой портфеля на одну дату.</p>{% endif %}
-  <p><small>Количество взято из последнего отчёта каждого счёта, завершившегося не позже выбранной даты. На точную дату отчёта используется его итоговая оценка позиции; ручная цена на эту же дату имеет приоритет. Для других дат берётся последняя доступная цена. Цена старше {{ estimate.max_price_age_days }} календарных дней показана с источником и датой, но не включена в известную стоимость. Денежные остатки показаны отдельно. Оценка не заменяет сверку операций.</small></p>
-  <div class="scroll"><table><tr><th>Счёт</th><th>Инструмент</th><th>Количество, шт.</th><th>Дата позиции</th><th>Цена или источник оценки</th><th>Стоимость, ₽</th></tr>
-  {% for row in estimate.positions %}<tr><td>{{ row.account.account_number or ('Номер неоднозначен' if row.account.account_number_conflict else 'Номер неизвестен') }} — {{ row.account.name }}</td><td>{{ row.name }}<br><small>{{ row.isin or 'ISIN неизвестен' }}</small></td><td>{{ row.quantity }}</td><td>{{ row.report_date }}</td><td>{% if row.price_status == 'broker_report' %}Итоговая стоимость из отчёта брокера · {{ row.report_date }}; цена одной бумаги не указана{% elif row.price %}{{ row.price.amount }} ₽ за бумагу · {{ row.price.as_of }} · {{ row.price.source | price_source_ru }}{% if row.price_status == 'stale' %} · устарела{% endif %}{% else %}—{% endif %}</td><td>{{ row.value | rub if row.value is not none else ('Нужна конвертация' if row.price_status == 'currency_conversion_required' else 'Неизвестна') }}</td></tr>{% endfor %}
-  </table></div>
-  <details><summary>Управление ценами</summary>
-  <h3>Ручная цена</h3>
-  <form method="post" action="/prices">
-    <input type="hidden" name="csrf" value="{{ csrf }}">
-    <input name="isin" placeholder="ISIN" maxlength="12" required>
-    <input name="amount" type="number" min="0.000001" step="any" placeholder="₽ за бумагу" required>
-    <input name="as_of" type="date" max="{{ today }}" value="{{ today }}" required>
-    <input name="note" placeholder="Источник / примечание">
-    <button>Сохранить цену</button>
-  </form>
-  {% if moex_iss_enabled %}
-  <h3>Цена Мосбиржи по ISIN</h3>
-  <form method="post" action="/prices/moex/refresh">
-    <input type="hidden" name="csrf" value="{{ csrf }}">
-    <label>Дата оценки <input name="as_of" type="date" max="{{ today }}" value="{{ estimate.as_of or today }}" required></label>
-    <button>Обновить цены всех ненулевых позиций</button>
-  </form>
-  <small>Сервис проверяет каждую бумагу по ISIN и дату котировки. Цены сохраняются вместе, только если подтверждены все бумаги. При ошибке уже сохранённые цены не меняются.</small>
-  <form method="post" action="/prices/moex/auto">
-    <input type="hidden" name="csrf" value="{{ csrf }}">
-    <input name="isin" placeholder="ISIN бумаги" maxlength="12" required>
-    <label>Дата оценки <input name="as_of" type="date" max="{{ today }}" value="{{ estimate.as_of or today }}" required></label>
-    <button>Найти бумагу и цену</button>
-  </form>
-  <small>Для однозначно найденной акции TQBR или рублёвой облигации TQOB/TQCB сервис проверяет бумагу по ISIN и сохраняет подтверждённую цену на дату. При неоднозначном коде используйте форму с SECID ниже.</small>
-  <h3>Котировка акции Мосбиржи, TQBR</h3>
-  <form method="post" action="/prices/moex">
-    <input type="hidden" name="csrf" value="{{ csrf }}">
-    <input name="isin" placeholder="ISIN акции" maxlength="12" required>
-    <input name="secid" placeholder="SECID, например SBER" maxlength="24" required>
-    <label>Дата закрытия (необязательно) <input name="as_of" type="date" max="{{ today }}"></label>
-    <button>Получить цену</button>
-  </form>
-  <small>Без даты сервис сохраняет последнюю сделку. С датой берёт последнее закрытие TQBR за семь календарных дней до неё и проверяет SECID, ISIN, валюту и дату.</small>
-  <h3>Историческая цена облигации Мосбиржи</h3>
-  <form method="post" action="/prices/moex/bond">
-    <input type="hidden" name="csrf" value="{{ csrf }}">
-    <input name="isin" placeholder="ISIN облигации" maxlength="12" required>
-    <input name="secid" placeholder="SECID облигации" maxlength="24" required>
-    <select name="board"><option value="TQOB">TQOB</option><option value="TQCB">TQCB</option></select>
-    <label>Дата оценки <input name="as_of" type="date" max="{{ today }}" value="{{ estimate.as_of or today }}" required></label>
-    <button>Получить цену с НКД</button>
-  </form>
-  <small>Рублёвая цена одной облигации = закрытие в процентах × непогашенный номинал / 100 + НКД. Сервис проверяет ISIN, режим, валюту и дату; при отсутствии нужных полей сохраняйте проверенную ручную цену.</small>
-  {% else %}
-  <p class="warn">Автоматическая загрузка цен Мосбиржи отключена в конфигурации. Для оценки можно внести цену вручную с датой и источником.</p>
-  {% endif %}
-  </details>
-</section>
-<section>
-  <h2>Последние позиции по отчётам</h2>
-  {% for snapshot in snapshots %}
-    <h3>{{ snapshot.account.account_number or ('Номер неоднозначен' if snapshot.account.account_number_conflict else 'Номер неизвестен') }} — {{ snapshot.account.name }} — {{ snapshot.period_end }}</h3>
-    {% if snapshot.unparsed or snapshot.checks | selectattr('status', 'ne', 'matched') | list %}<p class="warn">Есть неполные данные или расхождения. <a href="/imports/{{ snapshot.attempt_id }}">Проверить отчёт</a></p>{% endif %}
-    <div class="scroll"><table><tr><th>Бумага</th><th>ISIN</th><th>Количество на дату отчёта</th></tr>
-    {% for position in snapshot.positions %}<tr><td>{{ position.name }}</td><td>{{ position.isin or 'Не определён' }}</td><td>{{ position.end_quantity }}</td></tr>{% endfor %}
-    </table></div>
-  {% else %}<p>Подтверждённых отчётов пока нет.</p>{% endfor %}
-  <p>Проведённых событий: {{ event_count }}.</p>
-  <p><a href="/export/positions.csv">Выгрузить позиции CSV</a> · <a href="/export/operations.csv">Выгрузить операции CSV</a> · <a href="/export/valuations.csv{% if estimate.as_of %}?as_of={{ estimate.as_of }}{% endif %}">Выгрузить оценку CSV</a> · <a href="/export/metrics.csv">Выгрузить расчёты CSV</a> · <a href="/export/gaps.csv">Выгрузить разрывы и подтверждения CSV</a></p>
-</section>
-<section>
   <h2>История загрузок</h2>
   <div class="scroll"><table><tr><th>№</th><th>Файл</th><th>Период</th><th>Состояние</th></tr>
   {% for attempt in attempts %}<tr><td><a href="/imports/{{ attempt.id }}">{{ attempt.id }}</a></td><td>{{ attempt.original_name }}</td><td>{{ attempt.period_start }} — {{ attempt.period_end }}</td><td>{{ attempt.state | import_state_ru }}</td></tr>{% endfor %}
@@ -196,5 +197,6 @@
   <form method="post" action="/backup"><input type="hidden" name="csrf" value="{{ csrf }}"><button>Скачать копию базы и файлов</button></form>
   <small>Храните архив как конфиденциальный документ. Восстановление выполняется в новое хранилище после проверки целостности.</small>
 </section>
+
 </div>
 {% endblock %}

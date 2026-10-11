@@ -27,8 +27,14 @@ from .prices import find_moex_security, get_moex_bond_price, get_moex_share_clos
 from .storage import MAX_UPLOAD_BYTES, Storage
 
 
+def rub_ui(value: Decimal) -> str:
+    """Format a RUB amount for the Russian interface without changing CSV values."""
+    return format(Decimal(rub_text(value)), ",.2f").replace(",", "\u202f").replace(".", ",")
+
+
 TEMPLATES = Environment(loader=PackageLoader("svoibumagi", "templates"), autoescape=select_autoescape(["html"]))
 TEMPLATES.filters["rub"] = rub_text
+TEMPLATES.filters["rub_ui"] = rub_ui
 TEMPLATES.filters["reason_ru"] = reason_ru
 TEMPLATES.filters["broker_ru"] = lambda value: BROKERS.get(value, value)
 TEMPLATES.filters["kind_ru"] = lambda value: ACCOUNT_KINDS.get(value, value)

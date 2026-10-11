@@ -114,8 +114,8 @@ def test_fifo_fractional_cost_is_rounded_only_in_display_and_csv():
     html = TEMPLATES.get_template("home.html").render(
         logged_in=True, csrf="synthetic", accounts=[], metrics=[result], combined=combined,
         estimate={"positions": []}, snapshots=[], attempts=[], event_count=0, today="2025-01-01")
-    assert "Себестоимость открытых партий FIFO: 39016.10 ₽" in html
-    assert "реализованный результат: -60.22 ₽" in html
+    assert "Себестоимость открытых партий FIFO: 39\u202f016,10 ₽" in html
+    assert "реализованный результат: -60,22 ₽" in html
     assert "-60.219999999999999999999999" not in html
 
 
@@ -468,7 +468,7 @@ def test_two_distinct_accounts_match_hand_calculated_overview_and_csv():
     assert "Общий портфель на 2026-01-01: 320 ₽" in html
     assert "Synthetic second — 2026-01-01" in html
     assert "Денежный остаток: 100 ₽; бумаги: 110 ₽; сумма: 210 ₽" in html
-    assert "Себестоимость открытых партий FIFO: 100.00 ₽; реализованный результат: 30.00 ₽" in html
+    assert "Себестоимость открытых партий FIFO: 100,00 ₽; реализованный результат: 30,00 ₽" in html
 
 
 def test_combined_xirr_excludes_paired_internal_transfer():
