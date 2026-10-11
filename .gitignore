@@ -9,6 +9,7 @@ dist/
 *.db
 *.sqlite*
 data/
+backups/
 private/
 samples/private/
 *.bak
