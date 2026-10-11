@@ -1,4 +1,5 @@
-include LICENSE README.md Dockerfile compose.yaml compose.local-http.yaml requirements.lock .dockerignore
+include LICENSE README.md Dockerfile compose.yaml compose.local-http.yaml compose.public.yaml requirements.lock .dockerignore
+include deploy/Caddyfile
 recursive-include docs *.md
 recursive-include deploy *.yaml *.conf *.sh
 recursive-include scripts *.py
