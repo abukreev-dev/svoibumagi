@@ -16,7 +16,7 @@ REASONS = {
     "full history from account opening has not been confirmed": "Не подтверждено, что загружены отчёты с открытия счёта.",
     "first report has no confirmed zero opening cash balance": "На начало первого отчёта уже были деньги или нулевой остаток не подтверждён.",
     "first report has opening positions without cost basis": "На начало первого отчёта уже были бумаги; цена их покупки неизвестна.",
-    "at least one report has unresolved rows or reconciliation": "В одном из отчётов остались неразобранные строки или неподтверждённая сверка.",
+    "at least one report has unresolved rows or reconciliation": "В отчёте есть неразобранные строки либо нет подтверждённого конечного остатка для части бумаг.",
     "instrument absent from report position snapshot": "Бумага отсутствует в итоговой таблице позиций отчёта; нулевой остаток не подтверждён.",
     "ledger cash movements do not match latest reported balance": "Движения денег в журнале не совпадают с конечным остатком брокера.",
     "committed reports disagree on the source account number": "В проведённых отчётах расходятся номера счёта.",
