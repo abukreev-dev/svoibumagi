@@ -79,6 +79,26 @@ def test_conflicting_source_account_numbers_block_verified_financial_metrics():
     assert evaluate_combined([result])["xirr"] is None
 
 
+def test_opening_cash_is_included_in_partial_period_balance_check():
+    account, events, reports, prices = _fixture()
+    reports[0]["cash_snapshots"][0].update({"start_amount": "25", "end_amount": "25"})
+    result = evaluate_account(account, events, reports, prices, None)
+    assert "first report has no confirmed zero opening cash balance" in result["reasons"]
+    assert "ledger cash movements do not match latest reported balance" not in result["reasons"]
+
+
+def test_uncovered_period_does_not_claim_final_cash_mismatch():
+    account, events, reports, prices = _fixture()
+    first = deepcopy(reports[0])
+    first["period_end"] = "2025-01-31"
+    second = deepcopy(reports[0])
+    second.update({"attempt_id": 2, "period_start": "2025-03-01", "period_end": "2026-01-01"})
+    second["cash_snapshots"][0]["end_amount"] = "900"
+    result = evaluate_account(account, events, [first, second], prices, None)
+    assert result["gaps"] == [{"start": "2025-02-01", "end": "2025-02-28", "days": 28}]
+    assert "ledger cash movements do not match latest reported balance" not in result["reasons"]
+
+
 def test_fifo_fractional_cost_is_rounded_only_in_display_and_csv():
     account, events, reports, prices = _fixture()
     result = evaluate_account(account, events, reports, prices, date(2025, 1, 1))

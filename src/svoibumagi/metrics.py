@@ -463,8 +463,11 @@ def evaluate_account(account: dict, events: list[dict], reports: list[dict],
         reasons.append("cash transfer direction and counterparty are unclassified")
     if any(e["kind"] in {"internal_in", "internal_out"} and not e.get("paired_event_id") for e in cash_events):
         reasons.append("internal transfer has no paired event")
-    if cash is not None:
-        calculated_cash = sum((Decimal(e["amount"]) for e in cash_events), Decimal(0))
+    if cash is not None and not gaps:
+        opening_cash = sum((Decimal(row["start_amount"]) for row in first["cash_snapshots"]
+                            if row["currency"] == "RUB"), Decimal(0))
+        calculated_cash = opening_cash + sum((Decimal(e["amount"]) for e in cash_events
+                                              if e["currency"] == "RUB"), Decimal(0))
         if calculated_cash != cash:
             reasons.append("ledger cash movements do not match latest reported balance")
     flows = []
