@@ -1,0 +1,103 @@
+/* Приватная рабочая область: шапка, сетка страниц, карточки показателей. */
+    .app-header { border-bottom: 1px solid var(--line); background: var(--surface) }
+    .header-inner { width: min(1360px, calc(100% - 64px)); min-height: 68px; margin: auto; display: flex; align-items: center; gap: 36px }
+    .brand { display: inline-flex; align-items: center; gap: 11px; color: var(--navy); text-decoration: none; font-size: 1.1rem; font-weight: 700; letter-spacing: -.02em; white-space: nowrap }
+    .brand-mark { width: 34px; height: 34px; display: grid; place-items: center; color: var(--surface); background: var(--navy); border-radius: 6px; font-size: 1rem }
+    .main-nav { display: flex; align-items: stretch; align-self: stretch; gap: 4px; flex: 1; flex-wrap: nowrap }
+    .main-nav a { display: inline-flex; align-items: center; padding: 0 16px; color: var(--muted); border-bottom: 2px solid transparent; font-size: .9rem; font-weight: 600; text-decoration: none }
+    .main-nav a:hover, .main-nav a[aria-current="page"] { color: var(--navy); border-color: var(--green) }
+    .logout-form { margin-left: auto }
+    .logout-form button { color: var(--navy); background: transparent; border-color: var(--line-strong) }
+    .logout-form button:hover { color: var(--navy); background: var(--surface-alt); border-color: var(--navy) }
+    main { width: min(1360px, calc(100% - 64px)); margin: 0 auto; padding: 36px 0 80px }
+    .page-heading { display: flex; align-items: end; justify-content: space-between; gap: 24px; margin-bottom: 24px }
+    .page-heading h2 { font-size: clamp(2rem, 3.4vw, 2.8rem); margin: 6px 0 10px; letter-spacing: -.035em }
+    .page-heading p:not(.eyebrow) { color: var(--muted); max-width: 780px; margin: 0 }
+    .text-link { flex: none; white-space: nowrap; font-weight: 600; text-decoration: none }
+    .summary-grid { display: grid; grid-template-columns: 1.5fr repeat(3, minmax(0, 1fr)); gap: 14px; margin-bottom: 14px }
+    .summary-card { display: flex; flex-direction: column; min-width: 0; min-height: 158px; padding: 22px 24px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius) }
+    .summary-card span { color: var(--muted); font-size: .85rem; font-weight: 600 }
+    .summary-card strong { margin: 10px 0 0; font-size: clamp(1.5rem, 2.1vw, 2rem); line-height: 1.15; color: var(--navy); font-variant-numeric: tabular-nums; overflow-wrap: anywhere }
+    .summary-card small { margin-top: auto; color: var(--muted); line-height: 1.45 }
+    .summary-card:first-child { color: var(--surface); background: var(--navy); border-color: var(--navy) }
+    .summary-card:first-child span, .summary-card:first-child small { color: #b9c8da }
+    .summary-card:first-child strong { color: var(--surface); font-size: clamp(1.8rem, 2.6vw, 2.5rem) }
+    .analytics-tabs { display: flex; gap: 8px; flex-wrap: nowrap; overflow-x: auto; margin: 20px 0 12px; padding: 2px 0 10px; scrollbar-width: thin }
+    .analytics-tabs a { flex: none; min-height: 38px; display: inline-flex; align-items: center; padding: 8px 15px; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; color: var(--muted); font-size: .89rem; font-weight: 600; text-decoration: none }
+    .analytics-tabs a[aria-current="page"] { color: var(--surface); background: var(--navy); border-color: var(--navy) }
+    .date-picker { display: flex; align-items: center; flex-wrap: wrap; gap: 8px }
+    .metric-large { font-size: clamp(2.2rem, 4.4vw, 3.4rem); line-height: 1.1; font-weight: 700; letter-spacing: -.035em; color: var(--navy); font-variant-numeric: tabular-nums; margin: 12px 0 }
+    .portfolio-map { display: flex; flex-wrap: wrap; gap: 10px }
+    .map-tile { min-width: 160px; min-height: 118px; flex-basis: 160px; display: flex; flex-direction: column; gap: 6px; padding: 16px; background: var(--green-soft); border: 1px solid #cfe4da; border-radius: var(--radius) }
+    .map-tile span { color: var(--green-700); font-size: 1.3rem; font-weight: 700; font-variant-numeric: tabular-nums }
+    .home-sections { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 18px; align-items: start }
+    .home-sections > section { min-width: 0; margin: 9px 0 }
+    .home-sections > section.wide { grid-column: 1 / -1 }
+    .home-sections > section h2 { display: flex; align-items: center; gap: 10px }
+    .home-sections > section h2:before { content: ""; flex: none; width: 4px; height: 18px; border-radius: 2px; background: var(--green) }
+    .login-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(340px, 420px); overflow: hidden; min-height: 480px; margin: 28px auto; max-width: 1040px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius) }
+    .login-intro { display: flex; flex-direction: column; justify-content: space-between; padding: 52px; color: var(--surface); background: var(--navy) }
+    .login-intro .eyebrow { color: #7fd1ab !important }
+    .login-intro h1 { max-width: 460px; margin: 20px 0; color: var(--surface); font-size: clamp(2.3rem, 3.4vw, 3.4rem); line-height: 1.1; letter-spacing: -.04em }
+    .login-intro p { max-width: 420px; color: #c2d0e0; line-height: 1.7 }
+    .login-intro small { color: #9fb3c8 }
+    .login-panel { display: flex; flex-direction: column; justify-content: center; padding: 52px 44px }
+    .login-panel h2 { margin-bottom: 8px; font-size: 1.7rem }
+    .login-panel p { color: var(--muted); font-size: .9rem }
+    .login-panel p.error { color: var(--red) }
+    .login-panel label { display: block; margin: 24px 0 8px; font-weight: 600; color: var(--navy) }
+    .login-panel input[type=password] { width: 100%; margin: 0 0 14px }
+    .login-panel button { width: 100%; margin: 0 }
+    @media (max-width: 1080px) {
+      .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) }
+      .summary-card:first-child { grid-column: 1 / -1 }
+      .header-inner { gap: 20px }
+      .main-nav a { padding: 0 10px }
+    }
+    @media (max-width: 760px) {
+      .header-inner, main { width: min(100% - 32px, 1360px) }
+      .header-inner { min-height: 60px; flex-wrap: wrap; column-gap: 12px }
+      .main-nav { order: 3; width: 100%; min-width: 0; overflow-x: auto; white-space: nowrap; min-height: 44px }
+      .main-nav a { padding: 9px 11px 7px }
+      main { padding-top: 26px }
+      .home-sections { display: block }
+      .page-heading { display: block }
+      .text-link { display: inline-block; margin-top: 10px }
+      .login-layout { grid-template-columns: 1fr }
+      .login-intro { padding: 34px }
+      .login-panel { padding: 34px }
+    }
+    @media (max-width: 520px) {
+      .header-inner, main { width: min(100% - 24px, 1360px) }
+      .summary-grid { grid-template-columns: 1fr; gap: 10px }
+      .summary-card:first-child { grid-column: auto }
+      .summary-card { min-height: 130px; padding: 19px 20px }
+      section { padding: 20px 18px }
+      .page-heading h2 { font-size: 2rem }
+      .metric-large { font-size: 2.3rem }
+      .date-picker label, .date-picker input { width: 100% }
+      .login-intro { padding: 26px }
+      .login-panel { padding: 26px }
+    }
+
+.map-tile.grow-0 { flex-grow: 1 }
+.map-tile.grow-1 { flex-grow: 1 }
+.map-tile.grow-2 { flex-grow: 2 }
+.map-tile.grow-3 { flex-grow: 3 }
+.map-tile.grow-4 { flex-grow: 4 }
+.map-tile.grow-5 { flex-grow: 5 }
+.map-tile.grow-6 { flex-grow: 6 }
+.map-tile.grow-7 { flex-grow: 7 }
+.map-tile.grow-8 { flex-grow: 8 }
+.map-tile.grow-9 { flex-grow: 9 }
+.map-tile.grow-10 { flex-grow: 10 }
+.map-tile.grow-11 { flex-grow: 11 }
+.map-tile.grow-12 { flex-grow: 12 }
+.map-tile.grow-13 { flex-grow: 13 }
+.map-tile.grow-14 { flex-grow: 14 }
+.map-tile.grow-15 { flex-grow: 15 }
+.map-tile.grow-16 { flex-grow: 16 }
+.map-tile.grow-17 { flex-grow: 17 }
+.map-tile.grow-18 { flex-grow: 18 }
+.map-tile.grow-19 { flex-grow: 19 }
+.map-tile.grow-20 { flex-grow: 20 }

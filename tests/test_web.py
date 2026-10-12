@@ -41,7 +41,7 @@ def test_all_private_routes_require_session_and_mutations_require_csrf(tmp_path:
     routes = [(method, route.path.replace("{attempt_id}", "999")
                .replace("{account_id}", "999").replace("{event_id}", "999")
                .replace("{period_id}", "999"))
-              for route in app.routes for method in route.methods
+              for route in app.routes for method in getattr(route, "methods", ())
               if method in {"GET", "POST"} and route.path not in {"/", "/login"}]
     assert routes
 

@@ -46,7 +46,7 @@
 </section>
 {% elif view == 'map' %}
 <section><h3>Карта портфеля</h3>{% if estimate.incomplete %}<p class="notice">Карта охватывает только положительные позиции с известной стоимостью. Размер блока — доля среди них.</p>{% endif %}
-  <div class="portfolio-map">{% for item in data.weights %}<div class="map-tile" style="flex-grow: {{ (item.share * 10) | round(0) }}"><strong>{{ item.name }}</strong><span>{{ item.share | round(1) }} %</span><small>{{ item.value | rub_ui }} ₽</small></div>{% else %}<p>Нет оценённых позиций.</p>{% endfor %}</div>
+  <div class="portfolio-map">{% for item in data.weights %}<div class="map-tile grow-{{ (item.share / 5) | round(0) | int }}"><strong>{{ item.name }}</strong><span>{{ item.share | round(1) }} %</span><small>{{ item.value | rub_ui }} ₽</small></div>{% else %}<p>Нет оценённых позиций.</p>{% endfor %}</div>
 </section>
 {% elif view == 'multiples' %}
 <section><h3>Мультипликаторы</h3><p class="notice">Отчёты брокеров не содержат P/E, P/BV и другие фундаментальные показатели. Нужен отдельный источник с датой, методикой и правом использования данных. Сейчас сервис не подставляет неподтверждённые значения.</p></section>

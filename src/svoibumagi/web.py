@@ -11,13 +11,16 @@ from datetime import datetime
 from pathlib import Path
 import secrets
 import tempfile
+import logging
+import ipaddress
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
+from fastapi.staticfiles import StaticFiles
 from jinja2 import Environment, PackageLoader, select_autoescape
 from starlette.background import BackgroundTask
 
-from .auth import verify_password
+from .auth import LoginLimiter, verify_password
 from .analytics import TABS, build_analytics
 from .backup import create_backup
 from .exports import gaps_csv, metrics_csv, operations_csv, positions_csv, rub_text, valuations_csv
@@ -64,8 +67,11 @@ def create_app(data_dir: Path, password_hash: str, *, secure_cookie: bool = True
                moex_iss_enabled: bool = False) -> FastAPI:
     if not password_hash.startswith("scrypt:"):
         raise ValueError("A scrypt owner password hash is required")
+    verify_password("", password_hash)  # Reject unsupported parameters at startup.
     storage = Storage(data_dir)
+    login_limiter = LoginLimiter()
     app = FastAPI(title="Свои бумаги", docs_url=None, redoc_url=None, openapi_url=None)
+    app.mount("/assets", StaticFiles(packages=[("svoibumagi", "static")]), name="assets")
 
     @app.middleware("http")
     async def private_response_headers(request: Request, call_next):
@@ -75,7 +81,7 @@ def create_app(data_dir: Path, password_hash: str, *, secure_cookie: bool = True
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Content-Security-Policy"] = (
-            "default-src 'none'; style-src 'self' 'unsafe-inline'; "
+            "default-src 'none'; style-src 'self'; "
             "form-action 'self'; base-uri 'none'; frame-ancestors 'none'"
         )
         return response
@@ -86,11 +92,25 @@ def create_app(data_dir: Path, password_hash: str, *, secure_cookie: bool = True
         response.headers["Cache-Control"] = "no-store"
         return response
 
-    def session(request: Request) -> str | None:
-        return storage.get_session_csrf(request.cookies.get("sb_session"))
+    def login_client(request: Request) -> str:
+        peer = request.client.host if request.client else "unknown"
+        try:
+            trusted_peer = ipaddress.ip_address(peer).is_private
+        except ValueError:
+            trusted_peer = False
+        if trusted_peer:
+            forwarded = request.headers.get("x-forwarded-for", "").split(",")[-1].strip()
+            try:
+                return str(ipaddress.ip_address(forwarded))
+            except ValueError:
+                pass
+        return peer
 
-    def require(request: Request) -> str:
-        csrf = session(request)
+    async def session(request: Request) -> str | None:
+        return await asyncio.to_thread(storage.get_session_csrf, request.cookies.get("sb_session"))
+
+    async def require(request: Request) -> str:
+        csrf = await session(request)
         if not csrf:
             raise HTTPException(status_code=401, detail="Authentication required")
         return csrf
@@ -119,7 +139,7 @@ def create_app(data_dir: Path, password_hash: str, *, secure_cookie: bool = True
     def home_context(csrf: str, error: str | None = None, as_of: date | None = None) -> dict:
         metrics = storage.financial_metrics(as_of)
         snapshots = storage.latest_snapshots(as_of)
-        estimate = storage.portfolio_estimate(as_of)
+        estimate = storage.portfolio_estimate(as_of, snapshots=snapshots)
         cash_rows = [row for snapshot in snapshots for row in snapshot["cash_snapshots"]
                      if row["currency"] == "RUB"]
         known_cash = sum((Decimal(row["end_amount"]) for row in cash_rows), Decimal(0))
@@ -138,7 +158,7 @@ def create_app(data_dir: Path, password_hash: str, *, secure_cookie: bool = True
 
     @app.get("/login", response_class=HTMLResponse)
     async def login_page(request: Request):
-        if session(request):
+        if await session(request):
             return RedirectResponse("/", status_code=303)
         login_csrf = secrets.token_urlsafe(24)
         response = render("login.html", csrf=login_csrf, error=None)
@@ -151,108 +171,122 @@ def create_app(data_dir: Path, password_hash: str, *, secure_cookie: bool = True
         cookie_csrf = request.cookies.get("sb_login_csrf", "")
         if not cookie_csrf or not hmac.compare_digest(cookie_csrf, str(form.get("csrf", ""))):
             raise HTTPException(status_code=403, detail="Invalid login form")
-        if not verify_password(str(form.get("password", "")), password_hash):
+        client = login_client(request)
+        retry_after = login_limiter.acquire(client)
+        if retry_after:
+            logging.warning("Owner login rate limited: client=%s", client)
+            return Response("Слишком много попыток входа", status_code=429,
+                            headers={"Retry-After": str(retry_after)})
+        success = False
+        try:
+            success = await asyncio.to_thread(verify_password, str(form.get("password", "")), password_hash)
+        finally:
+            login_limiter.finish(client, success)
+        if not success:
+            logging.warning("Failed owner login: client=%s", client)
             return render("login.html", csrf=cookie_csrf, error="Неверный пароль")
-        token, _ = storage.create_session()
+        token, _ = await asyncio.to_thread(storage.create_session)
         response = RedirectResponse("/", status_code=303)
         response.set_cookie("sb_session", token, httponly=True, secure=secure_cookie, samesite="strict", max_age=12 * 3600)
-        response.delete_cookie("sb_login_csrf")
+        response.delete_cookie("sb_login_csrf", path="/")
         return response
 
     @app.post("/logout")
     async def logout(request: Request):
-        token = require(request)
+        token = await require(request)
         form = await request.form()
         check_csrf(request, form, token)
-        storage.delete_session(request.cookies.get("sb_session"))
+        await asyncio.to_thread(storage.delete_session, request.cookies.get("sb_session"))
         response = RedirectResponse("/login", status_code=303)
         response.delete_cookie("sb_session")
         return response
 
     @app.get("/", response_class=HTMLResponse)
     async def home(request: Request):
-        csrf = session(request)
+        csrf = await session(request)
         if not csrf:
             return render("landing.html", logged_in=False)
-        return render("home.html", **home_context(csrf, as_of=valuation_date(request)))
+        return render("home.html", **await asyncio.to_thread(home_context, csrf, as_of=valuation_date(request)))
 
     @app.get("/analytics", response_class=HTMLResponse)
     async def analytics_page(request: Request):
-        csrf = require(request)
+        csrf = await require(request)
         view = request.query_params.get("view", "value")
         if view not in {key for key, _ in TABS}:
             raise HTTPException(status_code=404, detail="Неизвестный раздел аналитики")
         as_of = valuation_date(request)
-        estimate = storage.portfolio_estimate(as_of)
-        metrics = storage.financial_metrics(as_of)
-        combined = evaluate_combined(metrics)
-        data = build_analytics(estimate, storage.list_events(), estimate["as_of"],
-                               storage.latest_snapshots(as_of))
+        def analytics_context():
+            estimate = storage.portfolio_estimate(as_of)
+            metrics = storage.financial_metrics(as_of)
+            data = build_analytics(estimate, storage.list_events(), estimate["as_of"],
+                                   storage.latest_snapshots(as_of))
+            return estimate, metrics, evaluate_combined(metrics), data
+        estimate, metrics, combined, data = await asyncio.to_thread(analytics_context)
         return render("analytics.html", csrf=csrf, view=view, estimate=estimate,
                       metrics=metrics, combined=combined, data=data)
 
     @app.post("/accounts")
     async def add_account(request: Request):
-        csrf = require(request)
+        csrf = await require(request)
         form = await request.form()
         check_csrf(request, form, csrf)
         try:
-            storage.create_account(str(form.get("broker", "")), str(form.get("kind", "")), str(form.get("name", "")))
+            await asyncio.to_thread(storage.create_account, str(form.get("broker", "")), str(form.get("kind", "")), str(form.get("name", "")))
         except ValueError as exc:
-            return render("home.html", **home_context(csrf, str(exc)))
+            return render("home.html", **await asyncio.to_thread(home_context, csrf, str(exc)))
         return RedirectResponse("/", status_code=303)
 
     @app.post("/accounts/{account_id}/delete")
     async def delete_empty_account(request: Request, account_id: int):
-        csrf = require(request)
+        csrf = await require(request)
         form = await request.form()
         check_csrf(request, form, csrf)
         try:
-            storage.delete_empty_account(account_id)
+            await asyncio.to_thread(storage.delete_empty_account, account_id)
         except ValueError as exc:
-            return render("home.html", **home_context(csrf, str(exc)))
+            return render("home.html", **await asyncio.to_thread(home_context, csrf, str(exc)))
         return RedirectResponse("/", status_code=303)
 
     @app.post("/accounts/{account_id}/history")
     async def confirm_history(request: Request, account_id: int):
-        csrf = require(request)
+        csrf = await require(request)
         form = await request.form()
         check_csrf(request, form, csrf)
         try:
-            storage.confirm_account_history(account_id, date.fromisoformat(str(form.get("from_date", ""))),
+            await asyncio.to_thread(storage.confirm_account_history, account_id, date.fromisoformat(str(form.get("from_date", ""))),
                                             str(form.get("reason", "")))
         except ValueError as exc:
-            return render("home.html", **home_context(csrf, str(exc)))
+            return render("home.html", **await asyncio.to_thread(home_context, csrf, str(exc)))
         return RedirectResponse("/", status_code=303)
 
     @app.post("/accounts/{account_id}/inactive")
     async def confirm_inactive(request: Request, account_id: int):
-        csrf = require(request)
+        csrf = await require(request)
         form = await request.form()
         check_csrf(request, form, csrf)
         try:
-            storage.confirm_inactive_period(account_id,
+            await asyncio.to_thread(storage.confirm_inactive_period, account_id,
                                             date.fromisoformat(str(form.get("start_date", ""))),
                                             date.fromisoformat(str(form.get("end_date", ""))),
                                             str(form.get("reason", "")))
         except ValueError as exc:
-            return render("home.html", **home_context(csrf, str(exc)))
+            return render("home.html", **await asyncio.to_thread(home_context, csrf, str(exc)))
         return RedirectResponse("/", status_code=303)
 
     @app.post("/accounts/{account_id}/inactive/{period_id}/revoke")
     async def revoke_inactive(request: Request, account_id: int, period_id: int):
-        csrf = require(request)
+        csrf = await require(request)
         form = await request.form()
         check_csrf(request, form, csrf)
         try:
-            storage.revoke_inactive_period(account_id, period_id)
+            await asyncio.to_thread(storage.revoke_inactive_period, account_id, period_id)
         except ValueError as exc:
-            return render("home.html", **home_context(csrf, str(exc)))
+            return render("home.html", **await asyncio.to_thread(home_context, csrf, str(exc)))
         return RedirectResponse("/", status_code=303)
 
     @app.post("/imports")
     async def upload(request: Request):
-        csrf = require(request)
+        csrf = await require(request)
         body_limit = MAX_UPLOAD_BYTES + 64 * 1024  # Multipart headers and the two small form fields.
         declared_length = request.headers.get("content-length")
         if declared_length is not None:
@@ -292,96 +326,96 @@ def create_app(data_dir: Path, password_hash: str, *, secure_cookie: bool = True
                             if total > MAX_UPLOAD_BYTES:
                                 raise HTTPException(status_code=413, detail="Файл превышает лимит")
                             output.write(chunk)
-                    attempt_id, _ = storage.stage_file(account_id, Path(temp_name), original_name=filename)
+                    attempt_id, _ = await asyncio.to_thread(storage.stage_file, account_id, Path(temp_name), original_name=filename)
                 finally:
                     Path(temp_name).unlink(missing_ok=True)
         except (ValueError, KeyError) as exc:
-            return render("home.html", **home_context(csrf, str(exc)))
+            return render("home.html", **await asyncio.to_thread(home_context, csrf, str(exc)))
         return RedirectResponse(f"/imports/{attempt_id}", status_code=303)
 
     @app.get("/imports", response_class=HTMLResponse)
     async def import_history(request: Request, page: int = 1, account_id: int | None = None):
-        csrf = require(request)
+        csrf = await require(request)
         if page < 1:
             raise HTTPException(status_code=400, detail="Invalid import history page")
-        if account_id is not None and account_id not in {item["id"] for item in storage.list_accounts()}:
+        if account_id is not None and account_id not in {item["id"] for item in await asyncio.to_thread(storage.list_accounts)}:
             raise HTTPException(status_code=400, detail="Invalid import history account")
         page_size = 50
-        total = storage.count_attempts(account_id)
+        total = await asyncio.to_thread(storage.count_attempts, account_id)
         if page > max(1, (total + page_size - 1) // page_size):
             raise HTTPException(status_code=404, detail="Import history page not found")
-        attempts = storage.list_attempts(account_id, limit=page_size, offset=(page - 1) * page_size)
-        return render("import_history.html", csrf=csrf, attempts=attempts, accounts=storage.list_accounts(),
+        attempts = await asyncio.to_thread(storage.list_attempts, account_id, limit=page_size, offset=(page - 1) * page_size)
+        return render("import_history.html", csrf=csrf, attempts=attempts, accounts=await asyncio.to_thread(storage.list_accounts),
                       account_id=account_id, page=page, page_size=page_size, total=total)
 
     @app.post("/prices")
     async def manual_price(request: Request):
-        csrf = require(request)
+        csrf = await require(request)
         form = await request.form()
         check_csrf(request, form, csrf)
         try:
-            storage.add_price(str(form.get("isin", "")).strip().upper(), Decimal(str(form.get("amount", ""))),
+            await asyncio.to_thread(storage.add_price, str(form.get("isin", "")).strip().upper(), Decimal(str(form.get("amount", ""))),
                               date.fromisoformat(str(form.get("as_of", ""))), note=str(form.get("note", "")))
         except (ValueError, InvalidOperation) as exc:
-            return render("home.html", **home_context(csrf, str(exc)))
+            return render("home.html", **await asyncio.to_thread(home_context, csrf, str(exc)))
         return RedirectResponse("/", status_code=303)
 
     @app.post("/prices/moex")
     async def moex_share_price(request: Request):
-        csrf = require(request)
+        csrf = await require(request)
         form = await request.form()
         check_csrf(request, form, csrf)
         require_moex_iss()
         requested = str(form.get("as_of", "")).strip()
         try:
             valuation_day = date.fromisoformat(requested) if requested else None
-            quote = (get_moex_share_close(str(form.get("isin", "")), str(form.get("secid", "")),
-                                          valuation_day) if valuation_day else
-                     get_moex_share_quote(str(form.get("isin", "")), str(form.get("secid", ""))))
-            storage.add_price(quote.isin, quote.amount, quote.as_of, source="moex",
+            quote = (await asyncio.to_thread(get_moex_share_close, str(form.get("isin", "")), str(form.get("secid", "")),
+                                             valuation_day) if valuation_day else
+                     await asyncio.to_thread(get_moex_share_quote, str(form.get("isin", "")), str(form.get("secid", ""))))
+            await asyncio.to_thread(storage.add_price, quote.isin, quote.amount, quote.as_of, source="moex",
                               note=f"TQBR {quote.secid}; {'CLOSE' if valuation_day else 'LAST'}; {quote.url}")
         except ValueError as exc:
-            return render("home.html", **home_context(csrf, str(exc)))
+            return render("home.html", **await asyncio.to_thread(home_context, csrf, str(exc)))
         return RedirectResponse(f"/?as_of={valuation_day.isoformat()}" if valuation_day else "/", status_code=303)
 
     @app.post("/prices/moex/bond")
     async def moex_bond_price(request: Request):
-        csrf = require(request)
+        csrf = await require(request)
         form = await request.form()
         check_csrf(request, form, csrf)
         require_moex_iss()
         try:
             valuation_day = date.fromisoformat(str(form.get("as_of", "")))
-            quote = get_moex_bond_price(str(form.get("isin", "")), str(form.get("secid", "")),
-                                        str(form.get("board", "")), valuation_day)
-            storage.add_price(quote.isin, quote.amount, quote.as_of, source="moex",
+            quote = await asyncio.to_thread(get_moex_bond_price, str(form.get("isin", "")), str(form.get("secid", "")),
+                                            str(form.get("board", "")), valuation_day)
+            await asyncio.to_thread(storage.add_price, quote.isin, quote.amount, quote.as_of, source="moex",
                               note=f"{str(form.get('board', '')).strip().upper()} {quote.secid}; dirty RUB price = historical CLOSE percent * FACEVALUE / 100 + ACCINT; {quote.url}")
         except ValueError as exc:
-            return render("home.html", **home_context(csrf, str(exc)))
+            return render("home.html", **await asyncio.to_thread(home_context, csrf, str(exc)))
         return RedirectResponse(f"/?as_of={valuation_day.isoformat()}", status_code=303)
 
     @app.post("/prices/moex/auto")
     async def moex_auto_price(request: Request):
-        csrf = require(request)
+        csrf = await require(request)
         form = await request.form()
         check_csrf(request, form, csrf)
         require_moex_iss()
         try:
             valuation_day = date.fromisoformat(str(form.get("as_of", "")))
-            security = find_moex_security(str(form.get("isin", "")))
-            quote = (get_moex_share_close(security.isin, security.secid, valuation_day)
+            security = await asyncio.to_thread(find_moex_security, str(form.get("isin", "")))
+            quote = (await asyncio.to_thread(get_moex_share_close, security.isin, security.secid, valuation_day)
                      if security.kind == "share" else
-                     get_moex_bond_price(security.isin, security.secid, security.board, valuation_day))
+                     await asyncio.to_thread(get_moex_bond_price, security.isin, security.secid, security.board, valuation_day))
             method = "CLOSE RUB" if security.kind == "share" else "dirty RUB = CLOSE percent * FACEVALUE / 100 + ACCINT"
-            storage.add_price(quote.isin, quote.amount, quote.as_of, source="moex",
+            await asyncio.to_thread(storage.add_price, quote.isin, quote.amount, quote.as_of, source="moex",
                               note=f"{security.board} {security.secid}; {method}; {quote.url}")
         except ValueError as exc:
-            return render("home.html", **home_context(csrf, str(exc)))
+            return render("home.html", **await asyncio.to_thread(home_context, csrf, str(exc)))
         return RedirectResponse(f"/?as_of={valuation_day.isoformat()}", status_code=303)
 
     @app.post("/prices/moex/refresh")
     async def refresh_position_prices(request: Request):
-        csrf = require(request)
+        csrf = await require(request)
         form = await request.form()
         check_csrf(request, form, csrf)
         require_moex_iss()
@@ -389,7 +423,7 @@ def create_app(data_dir: Path, password_hash: str, *, secure_cookie: bool = True
             valuation_day = date.fromisoformat(str(form.get("as_of", "")))
             if valuation_day > datetime.now(ZoneInfo("Europe/Moscow")).date():
                 raise ValueError("Дата оценки не может быть в будущем")
-            positions = [row for row in storage.portfolio_estimate(valuation_day)["positions"]
+            positions = [row for row in (await asyncio.to_thread(storage.portfolio_estimate, valuation_day))["positions"]
                          if row["quantity"] != 0]
             if not positions:
                 raise ValueError("На выбранную дату нет ненулевых позиций")
@@ -404,28 +438,28 @@ def create_app(data_dir: Path, password_hash: str, *, secure_cookie: bool = True
                     return list(pool.map(lambda isin: resolve_moex_quote(isin, valuation_day), isins))
 
             quotes = await asyncio.to_thread(fetch_all)
-            storage.add_moex_prices_batch(quotes)
+            await asyncio.to_thread(storage.add_moex_prices_batch, quotes)
         except ValueError as exc:
             selected = valuation_day if "valuation_day" in locals() else None
-            return render("home.html", **home_context(csrf, str(exc), selected))
+            return render("home.html", **await asyncio.to_thread(home_context, csrf, str(exc), selected))
         return RedirectResponse(f"/?as_of={valuation_day.isoformat()}", status_code=303)
 
     @app.get("/imports/{attempt_id}", response_class=HTMLResponse)
     async def review(request: Request, attempt_id: int):
-        csrf = require(request)
+        csrf = await require(request)
         try:
-            result = storage.review_attempt(attempt_id)
+            result = await asyncio.to_thread(storage.review_attempt, attempt_id)
         except ValueError:
             raise HTTPException(status_code=404, detail="Import not found")
         return render("review.html", csrf=csrf, attempt_id=attempt_id, review=result, error=None)
 
     @app.post("/imports/{attempt_id}/confirm")
     async def confirm(request: Request, attempt_id: int):
-        csrf = require(request)
+        csrf = await require(request)
         form = await request.form()
         check_csrf(request, form, csrf)
         try:
-            review_data = storage.review_attempt(attempt_id)
+            review_data = await asyncio.to_thread(storage.review_attempt, attempt_id)
             decisions = {}
             for key in review_data["required_decisions"]:
                 decisions[key] = {"action": "acknowledge", "reason": str(form.get(f"reason::{key}", ""))}
@@ -439,32 +473,32 @@ def create_app(data_dir: Path, password_hash: str, *, secure_cookie: bool = True
                 decisions[key] = {"action": str(form.get(f"action::{key}", "")),
                                   "reason": str(form.get(f"reason::{key}", "")),
                                   "existing_event_id": int(selected) if selected else None}
-            storage.confirm_attempt(attempt_id, decisions)
+            await asyncio.to_thread(storage.confirm_attempt, attempt_id, decisions)
         except ValueError as exc:
-            return render("review.html", csrf=csrf, attempt_id=attempt_id, review=storage.review_attempt(attempt_id), error=str(exc))
+            return render("review.html", csrf=csrf, attempt_id=attempt_id, review=await asyncio.to_thread(storage.review_attempt, attempt_id), error=str(exc))
         return RedirectResponse("/", status_code=303)
 
     @app.post("/imports/{attempt_id}/reject")
     async def reject(request: Request, attempt_id: int):
-        csrf = require(request)
+        csrf = await require(request)
         form = await request.form()
         check_csrf(request, form, csrf)
         try:
-            storage.reject_attempt(attempt_id, str(form.get("reason", "")))
+            await asyncio.to_thread(storage.reject_attempt, attempt_id, str(form.get("reason", "")))
         except ValueError as exc:
-            return render("review.html", csrf=csrf, attempt_id=attempt_id, review=storage.review_attempt(attempt_id), error=str(exc))
+            return render("review.html", csrf=csrf, attempt_id=attempt_id, review=await asyncio.to_thread(storage.review_attempt, attempt_id), error=str(exc))
         return RedirectResponse("/", status_code=303)
 
     @app.post("/imports/{attempt_id}/delete")
     async def delete_unconfirmed_import(request: Request, attempt_id: int):
-        csrf = require(request)
+        csrf = await require(request)
         form = await request.form()
         check_csrf(request, form, csrf)
         try:
-            storage.delete_unconfirmed_attempt(attempt_id)
+            await asyncio.to_thread(storage.delete_unconfirmed_attempt, attempt_id)
         except ValueError as exc:
             try:
-                review_data = storage.review_attempt(attempt_id)
+                review_data = await asyncio.to_thread(storage.review_attempt, attempt_id)
             except ValueError:
                 raise HTTPException(status_code=404, detail="Import not found") from exc
             return render("review.html", csrf=csrf, attempt_id=attempt_id, review=review_data, error=str(exc))
@@ -473,7 +507,7 @@ def create_app(data_dir: Path, password_hash: str, *, secure_cookie: bool = True
     @app.get("/operations", response_class=HTMLResponse)
     async def operations(request: Request, account_id: int | None = None, event_type: str = "",
                          source_type: str = "", from_date: str = "", to_date: str = "", q: str = ""):
-        csrf = require(request)
+        csrf = await require(request)
         if event_type not in {"", "trade", "cash", "security_transfer"} or source_type not in {"", "broker", "manual"}:
             raise HTTPException(status_code=400, detail="Invalid operation filter")
         try:
@@ -488,7 +522,7 @@ def create_app(data_dir: Path, password_hash: str, *, secure_cookie: bool = True
             raise HTTPException(status_code=400, detail="Operation search is too long")
         needle = query.casefold()
         events = []
-        for event in storage.list_events(account_id):
+        for event in await asyncio.to_thread(storage.list_events, account_id):
             payload = event["payload"]
             event_date = payload.get("traded_at") or payload.get("date")
             if event_type and event["event_type"] != event_type:
@@ -503,35 +537,35 @@ def create_app(data_dir: Path, password_hash: str, *, secure_cookie: bool = True
             events.append(event)
         events.sort(key=lambda item: (item["payload"].get("traded_at") or item["payload"].get("date"),
                                       item["created_at"], str(item["id"])), reverse=True)
-        return render("operations.html", csrf=csrf, events=events, accounts=storage.list_accounts(), error=None,
+        return render("operations.html", csrf=csrf, events=events, accounts=await asyncio.to_thread(storage.list_accounts), error=None,
                       filters={"account_id": account_id, "event_type": event_type, "source_type": source_type,
                                "from_date": from_date, "to_date": to_date, "q": query})
 
     @app.get("/instruments", response_class=HTMLResponse)
     async def instruments(request: Request):
-        csrf = require(request)
-        return render("instruments.html", csrf=csrf, instruments=storage.list_instruments())
+        csrf = await require(request)
+        return render("instruments.html", csrf=csrf, instruments=await asyncio.to_thread(storage.list_instruments))
 
     @app.post("/operations/manual/cash")
     async def manual_cash(request: Request):
-        csrf = require(request)
+        csrf = await require(request)
         form = await request.form()
         check_csrf(request, form, csrf)
         try:
-            storage.add_manual_cash(int(str(form.get("account_id", ""))), date.fromisoformat(str(form.get("date", ""))),
+            await asyncio.to_thread(storage.add_manual_cash, int(str(form.get("account_id", ""))), date.fromisoformat(str(form.get("date", ""))),
                                     str(form.get("kind", "")), Decimal(str(form.get("amount", ""))),
                                     str(form.get("reason", "")))
         except (ValueError, InvalidOperation) as exc:
-            return render("operations.html", csrf=csrf, events=storage.list_events(), accounts=storage.list_accounts(), error=str(exc))
+            return render("operations.html", csrf=csrf, events=await asyncio.to_thread(storage.list_events), accounts=await asyncio.to_thread(storage.list_accounts), error=str(exc))
         return RedirectResponse("/operations", status_code=303)
 
     @app.post("/operations/manual/trade")
     async def manual_trade(request: Request):
-        csrf = require(request)
+        csrf = await require(request)
         form = await request.form()
         check_csrf(request, form, csrf)
         try:
-            storage.add_manual_trade(
+            await asyncio.to_thread(storage.add_manual_trade,
                 int(str(form.get("account_id", ""))), date.fromisoformat(str(form.get("traded_at", ""))),
                 date.fromisoformat(str(form.get("settled_at", ""))), str(form.get("isin", "")).strip().upper(),
                 str(form.get("name", "")), Decimal(str(form.get("quantity", ""))),
@@ -539,32 +573,32 @@ def create_app(data_dir: Path, password_hash: str, *, secure_cookie: bool = True
                 Decimal(str(form.get("commission", ""))), str(form.get("reason", "")),
             )
         except (ValueError, InvalidOperation) as exc:
-            return render("operations.html", csrf=csrf, events=storage.list_events(), accounts=storage.list_accounts(), error=str(exc))
+            return render("operations.html", csrf=csrf, events=await asyncio.to_thread(storage.list_events), accounts=await asyncio.to_thread(storage.list_accounts), error=str(exc))
         return RedirectResponse("/operations", status_code=303)
 
     @app.post("/operations/manual/principal")
     async def manual_principal(request: Request):
-        csrf = require(request)
+        csrf = await require(request)
         form = await request.form()
         check_csrf(request, form, csrf)
         try:
-            storage.add_manual_principal_action(
+            await asyncio.to_thread(storage.add_manual_principal_action,
                 int(str(form.get("account_id", ""))), date.fromisoformat(str(form.get("date", ""))),
                 str(form.get("isin", "")).strip().upper(), str(form.get("name", "")),
                 Decimal(str(form.get("principal_fraction", ""))), str(form.get("cash_event_id", "")),
                 str(form.get("reason", "")),
             )
         except (ValueError, InvalidOperation) as exc:
-            return render("operations.html", csrf=csrf, events=storage.list_events(), accounts=storage.list_accounts(), error=str(exc))
+            return render("operations.html", csrf=csrf, events=await asyncio.to_thread(storage.list_events), accounts=await asyncio.to_thread(storage.list_accounts), error=str(exc))
         return RedirectResponse("/operations", status_code=303)
 
     @app.post("/operations/manual/security-transfer")
     async def manual_security_transfer(request: Request):
-        csrf = require(request)
+        csrf = await require(request)
         form = await request.form()
         check_csrf(request, form, csrf)
         try:
-            storage.add_security_transfer(
+            await asyncio.to_thread(storage.add_security_transfer,
                 int(str(form.get("source_account_id", ""))),
                 int(str(form.get("destination_account_id", ""))),
                 date.fromisoformat(str(form.get("date", ""))),
@@ -572,27 +606,27 @@ def create_app(data_dir: Path, password_hash: str, *, secure_cookie: bool = True
                 Decimal(str(form.get("quantity", ""))), str(form.get("reason", "")),
             )
         except (ValueError, InvalidOperation) as exc:
-            return render("operations.html", csrf=csrf, events=storage.list_events(),
-                          accounts=storage.list_accounts(), error=str(exc))
+            return render("operations.html", csrf=csrf, events=await asyncio.to_thread(storage.list_events),
+                          accounts=await asyncio.to_thread(storage.list_accounts), error=str(exc))
         return RedirectResponse("/operations", status_code=303)
 
     @app.post("/operations/{event_id}/classify")
     async def classify_transfer(request: Request, event_id: int):
-        csrf = require(request)
+        csrf = await require(request)
         form = await request.form()
         check_csrf(request, form, csrf)
         try:
             pair = str(form.get("paired_event_id", "")).strip()
-            storage.classify_cash_event(event_id, str(form.get("kind", "")), str(form.get("reason", "")), int(pair) if pair else None)
+            await asyncio.to_thread(storage.classify_cash_event, event_id, str(form.get("kind", "")), str(form.get("reason", "")), int(pair) if pair else None)
         except ValueError as exc:
-            return render("operations.html", csrf=csrf, events=storage.list_events(), accounts=storage.list_accounts(), error=str(exc))
+            return render("operations.html", csrf=csrf, events=await asyncio.to_thread(storage.list_events), accounts=await asyncio.to_thread(storage.list_accounts), error=str(exc))
         return RedirectResponse("/operations", status_code=303)
 
     @app.get("/operations/{event_id}/source")
     async def source(request: Request, event_id: int):
-        require(request)
+        await require(request)
         try:
-            info = storage.event_source(event_id)
+            info = await asyncio.to_thread(storage.event_source, event_id)
         except ValueError as exc:
             raise HTTPException(status_code=409, detail="Stored source failed integrity check") from exc
         if not info or not info[0].is_file():
@@ -604,33 +638,33 @@ def create_app(data_dir: Path, password_hash: str, *, secure_cookie: bool = True
 
     @app.get("/export/operations.csv")
     async def export_operations(request: Request):
-        require(request)
-        numbers = {account["id"]: account["account_number"] for account in storage.list_accounts()}
-        response = Response(operations_csv(storage.list_events(), numbers), media_type="text/csv; charset=utf-8")
+        await require(request)
+        numbers = {account["id"]: account["account_number"] for account in await asyncio.to_thread(storage.list_accounts)}
+        response = Response(operations_csv(await asyncio.to_thread(storage.list_events), numbers), media_type="text/csv; charset=utf-8")
         response.headers["Content-Disposition"] = 'attachment; filename="operations.csv"'
         response.headers["Cache-Control"] = "no-store"
         return response
 
     @app.get("/export/positions.csv")
     async def export_positions(request: Request):
-        require(request)
-        response = Response(positions_csv(storage.latest_snapshots()), media_type="text/csv; charset=utf-8")
+        await require(request)
+        response = Response(positions_csv(await asyncio.to_thread(storage.latest_snapshots)), media_type="text/csv; charset=utf-8")
         response.headers["Content-Disposition"] = 'attachment; filename="positions.csv"'
         response.headers["Cache-Control"] = "no-store"
         return response
 
     @app.get("/export/valuations.csv")
     async def export_valuations(request: Request):
-        require(request)
-        response = Response(valuations_csv(storage.portfolio_estimate(valuation_date(request))), media_type="text/csv; charset=utf-8")
+        await require(request)
+        response = Response(valuations_csv(await asyncio.to_thread(storage.portfolio_estimate, valuation_date(request))), media_type="text/csv; charset=utf-8")
         response.headers["Content-Disposition"] = 'attachment; filename="valuations.csv"'
         response.headers["Cache-Control"] = "no-store"
         return response
 
     @app.get("/export/metrics.csv")
     async def export_metrics(request: Request):
-        require(request)
-        metrics = storage.financial_metrics(valuation_date(request))
+        await require(request)
+        metrics = await asyncio.to_thread(storage.financial_metrics, valuation_date(request))
         response = Response(metrics_csv(metrics, evaluate_combined(metrics)), media_type="text/csv; charset=utf-8")
         response.headers["Content-Disposition"] = 'attachment; filename="metrics.csv"'
         response.headers["Cache-Control"] = "no-store"
@@ -638,9 +672,9 @@ def create_app(data_dir: Path, password_hash: str, *, secure_cookie: bool = True
 
     @app.get("/export/gaps.csv")
     async def export_gaps(request: Request):
-        require(request)
-        metrics = storage.financial_metrics()
-        confirmations = {metric["account"]["id"]: storage.list_inactive_periods(metric["account"]["id"])
+        await require(request)
+        metrics = await asyncio.to_thread(storage.financial_metrics)
+        confirmations = {metric["account"]["id"]: await asyncio.to_thread(storage.list_inactive_periods, metric["account"]["id"])
                          for metric in metrics}
         response = Response(gaps_csv(metrics, confirmations), media_type="text/csv; charset=utf-8")
         response.headers["Content-Disposition"] = 'attachment; filename="gaps.csv"'
@@ -649,19 +683,18 @@ def create_app(data_dir: Path, password_hash: str, *, secure_cookie: bool = True
 
     @app.post("/backup")
     async def download_backup(request: Request):
-        csrf = require(request)
+        csrf = await require(request)
         form = await request.form()
         check_csrf(request, form, csrf)
-        fd, filename = tempfile.mkstemp(prefix="backup-", suffix=".zip", dir=storage.root)
-        os.close(fd)
-        Path(filename).unlink()
+        temp_dir = Path(tempfile.mkdtemp(prefix="backup-", dir=storage.root))
+        filename = temp_dir / "archive.zip"
         try:
-            create_backup(storage, Path(filename))
+            await asyncio.to_thread(create_backup, storage, filename)
         except Exception:
-            Path(filename).unlink(missing_ok=True)
+            temp_dir.rmdir()
             raise
         response = FileResponse(filename, filename="svoibumagi-backup.zip", media_type="application/zip",
-                                background=BackgroundTask(Path(filename).unlink, missing_ok=True))
+                                background=BackgroundTask(lambda: (filename.unlink(missing_ok=True), temp_dir.rmdir())))
         response.headers["Cache-Control"] = "no-store"
         response.headers["X-Content-Type-Options"] = "nosniff"
         return response

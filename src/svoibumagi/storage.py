@@ -111,14 +111,25 @@ def _detect(path: Path) -> tuple[str, str]:
         return "alfa", ".xls"
     if first.startswith(b"PK\x03\x04"):
         return "alfa", ".xlsx"
-    if b"<html" in first.lower() or b"<!doctype html" in first.lower() or b"<table" in first.lower() and b"\xd0\x9e\xd1\x82\xd1\x87\xd0\xb5\xd1\x82" in first:
+    decoded = first.decode("utf-8", errors="ignore") + first.decode("cp1251", errors="ignore")
+    if ("<html" in decoded.lower() or "<!doctype html" in decoded.lower()
+            or "<table" in decoded.lower() and re.search(r"отч[её]т", decoded, re.I)):
         return "sber", ".html"
     raise UnsupportedReport("Unknown report container")
+
+
+class _ClosingConnection(sqlite3.Connection):
+    def __exit__(self, exc_type, exc_value, traceback):
+        try:
+            return super().__exit__(exc_type, exc_value, traceback)
+        finally:
+            self.close()
 
 
 class Storage:
     def __init__(self, root: Path):
         self.root = root
+        self._next_session_cleanup = 0.0
         root.mkdir(parents=True, exist_ok=True, mode=0o700)
         os.chmod(root, 0o700)
         self.files = root / "files"
@@ -629,8 +640,9 @@ class Storage:
             )
 
     def _connect(self):
-        con = sqlite3.connect(self.db_path)
+        con = sqlite3.connect(self.db_path, timeout=30, factory=_ClosingConnection)
         con.execute("PRAGMA foreign_keys = ON")
+        con.execute("PRAGMA busy_timeout = 30000")
         return con
 
     @contextmanager
@@ -722,15 +734,20 @@ class Storage:
     def get_session_csrf(self, token: str | None) -> str | None:
         if not token:
             return None
+        now = datetime.now(timezone.utc)
         with self._connect() as con:
+            if now.timestamp() >= self._next_session_cleanup:
+                con.execute("DELETE FROM owner_sessions WHERE expires_at < ?", (now.isoformat(),))
+                self._next_session_cleanup = now.timestamp() + 300
             row = con.execute("SELECT csrf_token,expires_at FROM owner_sessions WHERE token_hash=?", (hashlib.sha256(token.encode()).hexdigest(),)).fetchone()
-        if row and row[1] > datetime.now(timezone.utc).isoformat():
+        if row and row[1] > now.isoformat():
             return row[0]
         return None
 
     def delete_session(self, token: str | None) -> None:
-        if token:
-            with self._connect() as con:
+        with self._connect() as con:
+            con.execute("DELETE FROM owner_sessions WHERE expires_at < ?", (datetime.now(timezone.utc).isoformat(),))
+            if token:
                 con.execute("DELETE FROM owner_sessions WHERE token_hash=?", (hashlib.sha256(token.encode()).hexdigest(),))
 
     def list_attempts(self, account_id: int | None = None, *, limit: int | None = None, offset: int = 0) -> list[dict]:
@@ -1288,12 +1305,20 @@ class Storage:
                 quote = self.latest_prices(date.fromisoformat(day)).get(isin)
                 if quote:
                     transfer_prices[transfer_id] = quote
+        all_events = self.list_events()
+        events_by_account: dict[int, list[dict]] = {}
+        grouped_events = all("account_id" in event for event in all_events)
+        if grouped_events:
+            for event in all_events:
+                if as_of is None or self._event_effective_date(event) <= as_of:
+                    events_by_account.setdefault(event["account_id"], []).append(event)
         for account in self.list_accounts():
             reports = [report for report in self.committed_reports(account["id"])
                        if as_of is None or date.fromisoformat(report["period_end"]) <= as_of]
             last_date = date.fromisoformat(max(r["period_end"] for r in reports)) if reports else None
-            events = [event for event in self.list_events(account["id"])
-                      if as_of is None or self._event_effective_date(event) <= as_of]
+            events = (events_by_account.get(account["id"], []) if grouped_events
+                      else [event for event in self.list_events(account["id"])
+                            if as_of is None or self._event_effective_date(event) <= as_of])
             with self._connect() as con:
                 row = con.execute("SELECT from_date FROM account_history WHERE account_id=?", (account["id"],)).fetchone()
             history_from = date.fromisoformat(row[0]) if row else None
@@ -1333,8 +1358,6 @@ class Storage:
         return path, original_name
 
     def add_price(self, isin: str, amount: Decimal, as_of: date, *, source: str = "manual", note: str = "") -> int:
-        import re
-
         if (not re.fullmatch(r"[A-Z]{2}[A-Z0-9]{9}[0-9]", isin) or not amount.is_finite()
                 or amount <= 0 or source not in {"manual", "moex"}
                 or as_of > datetime.now(ZoneInfo("Europe/Moscow")).date()):
@@ -1383,12 +1406,12 @@ class Storage:
             prices.setdefault(row["isin"], dict(row))
         return prices
 
-    def portfolio_estimate(self, as_of: date | None = None) -> dict:
+    def portfolio_estimate(self, as_of: date | None = None, *, snapshots: list[dict] | None = None) -> dict:
         valuation_date = as_of
         if valuation_date is None:
-            latest = self.latest_snapshots()
+            latest = snapshots if snapshots is not None else self.latest_snapshots()
             valuation_date = max((date.fromisoformat(item["period_end"]) for item in latest), default=None)
-        snapshots = self.latest_snapshots(valuation_date) if valuation_date is not None else []
+        snapshots = (snapshots if snapshots is not None else self.latest_snapshots(valuation_date)) if valuation_date is not None else []
         prices = self.latest_prices(valuation_date) if valuation_date is not None else {}
         positions = []
         subtotal = Decimal(0)

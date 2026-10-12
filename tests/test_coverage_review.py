@@ -60,7 +60,8 @@ def test_gap_boundary_ignores_zero_rows_but_detects_real_changes():
     before = {"report": _report({"RU000A000001": "7"}, "100")}
     zero_only = {"report": _report({"RU000A000001": "7", "RU000A000002": "0"}, "100")}
     changed = {"report": _report({"RU000A000001": "8"}, "110")}
-    parse = lambda item: item["report"]
+    def parse(item):
+        return item["report"]
 
     assert _boundary_comparison([before], [zero_only], parse) == ("совпали", "совпали")
     assert _boundary_comparison([before], [changed], parse) == ("отличаются", "отличаются")
@@ -74,7 +75,8 @@ def test_gap_review_distinguishes_dated_rows_from_missing_history():
                            "RU000A000001", "Synthetic", Decimal("1"), Decimal("10"),
                            Decimal("10"), Decimal("0"), "RUB")]
     report.cash_movements = [CashMovement(loc, date(2025, 2, 2), "trade_cash", Decimal("-10"), "RUB")]
-    parse = lambda item: item["report"]
+    def parse(item):
+        return item["report"]
     assert _gap_dated_rows([{"report": report}], date(2025, 2, 1), date(2025, 2, 3), parse) == \
         "сделки: есть; деньги: есть"
     assert _gap_dated_rows([{"report": report}], date(2025, 2, 3), date(2025, 2, 28), parse) == \
@@ -93,7 +95,8 @@ def test_sber_planned_settlement_explains_both_boundary_balances_without_proving
     after = _report({"RU000A000001": "3"}, "796.5")
     left = {"path": str(path), "sha256": hashlib.sha256(html).hexdigest(), "report": before}
     right = {"report": after}
-    parse = lambda item: item["report"]
+    def parse(item):
+        return item["report"]
     assert _sber_pending_boundary([left], [right], date(2025, 8, 8), date(2025, 8, 9), parse) == \
         (1, "позиции и деньги")
     assert _sber_pending_boundary([left], [right], date(2025, 8, 10), date(2025, 8, 11), parse) == \

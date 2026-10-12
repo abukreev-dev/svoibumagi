@@ -1,0 +1,85 @@
+{#
+  Единый набор токенов и базовых правил для публичной и приватной частей.
+  Стиль: строгий корпоративный финтех — глубокий синий, белый, графит,
+  благородный зелёный как акцент; чёткая сетка, крупные заголовки,
+  минимум декораций. Шрифты подключаются только локальные: CSP запрещает
+  внешние ресурсы (default-src 'none'), поэтому Inter/Roboto/Open Sans
+  берутся из системы, иначе используется системный sans-serif.
+#}
+:root {
+  color-scheme: light;
+  --navy: #0b2545;
+  --navy-700: #123a68;
+  --navy-600: #1b4e85;
+  --graphite: #27333f;
+  --muted: #5c6a79;
+  --line: #dce3ea;
+  --line-strong: #c3cedb;
+  --paper: #f4f6f9;
+  --surface: #ffffff;
+  --surface-alt: #f8fafc;
+  --green: #0f7a52;
+  --green-700: #0b5f40;
+  --green-soft: #e8f4ee;
+  --amber: #8a5a12;
+  --amber-soft: #fdf3e2;
+  --red: #9f2d2d;
+  --radius: 8px;
+  font: 16px/1.6 Inter, Roboto, "Open Sans", "Helvetica Neue", Arial, system-ui, sans-serif;
+  color: var(--graphite);
+  background: var(--paper);
+}
+* { box-sizing: border-box }
+html { scroll-behavior: smooth }
+body { margin: 0; padding: 0; color: var(--graphite); background: var(--paper) }
+h1, h2, h3, h4, p { margin-top: 0 }
+h1, h2, h3, h4 { color: var(--navy); font-weight: 700; letter-spacing: -.02em; line-height: 1.15 }
+a { color: var(--navy-600); text-underline-offset: 3px }
+a:hover { color: var(--navy) }
+a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible {
+  outline: 2px solid var(--green); outline-offset: 2px
+}
+.eyebrow {
+  display: inline-block; color: var(--green) !important; font-size: .74rem; font-weight: 700;
+  letter-spacing: .14em; text-transform: uppercase
+}
+section {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 26px 28px; margin: 16px 0; box-shadow: none
+}
+section > h2, section > h3 { font-size: 1.1rem; margin: 0 0 16px; letter-spacing: -.01em }
+.notice {
+  background: var(--amber-soft); color: var(--amber); border: 1px solid #ecd9b4;
+  border-radius: var(--radius); padding: 13px 16px; font-size: .9rem; line-height: 1.55
+}
+.error { color: var(--red); font-weight: 600 }
+.warn { color: var(--amber); font-weight: 600 }
+.ok { color: var(--green) }
+small { color: var(--muted) }
+summary { cursor: pointer; font-weight: 600; color: var(--navy-600); padding: 4px 0 }
+details[open] > summary { margin-bottom: 16px }
+table { border-collapse: collapse; width: 100%; font-size: .88rem; font-variant-numeric: tabular-nums }
+th, td { padding: 11px 14px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top }
+th {
+  color: var(--navy); background: var(--surface-alt); font-size: .73rem; font-weight: 700;
+  letter-spacing: .06em; text-transform: uppercase; white-space: nowrap
+}
+tr:last-child td { border-bottom: 0 }
+tbody tr:hover { background: var(--surface-alt) }
+.scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius) }
+.scroll table { min-width: 640px }
+.scroll th:first-child, .scroll td:first-child { padding-left: 18px }
+input, select, button { font: inherit }
+input:not([type=hidden]), select {
+  max-width: 100%; min-height: 40px; padding: 9px 12px; margin: 4px 6px 4px 0; color: var(--graphite);
+  background: var(--surface); border: 1px solid var(--line-strong); border-radius: 6px
+}
+input[type=file] { background: var(--surface-alt) }
+button {
+  min-height: 40px; padding: 9px 18px; margin: 3px 3px 3px 0; color: var(--surface);
+  background: var(--navy); border: 1px solid var(--navy); border-radius: 6px; font-weight: 600;
+  cursor: pointer; transition: background .15s ease
+}
+button:hover { background: var(--navy-700); border-color: var(--navy-700) }
+button:disabled { opacity: .5; cursor: not-allowed }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto } button { transition: none } }

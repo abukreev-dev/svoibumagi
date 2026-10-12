@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Аудит «Свои бумаги» — 12.10.2026</title>
+<style>
+  :root {
+    color-scheme: light;
+    --navy: #0b2545; --navy-700: #123a68; --navy-600: #1b4e85;
+    --graphite: #27333f; --muted: #5c6a79;
+    --line: #dce3ea; --line-strong: #c3cedb;
+    --paper: #f4f6f9; --surface: #fff; --surface-alt: #f8fafc;
+    --green: #0f7a52; --green-700: #0b5f40; --green-soft: #e8f4ee;
+    --amber: #8a5a12; --amber-soft: #fdf3e2; --red: #9f2d2d; --red-soft: #fbeceb;
+    font: 16px/1.6 Inter, Roboto, "Open Sans", "Helvetica Neue", Arial, system-ui, sans-serif;
+    color: var(--graphite); background: var(--paper);
+  }
+  * { box-sizing: border-box }
+  body { margin: 0 }
+  .wrap { width: min(1100px, calc(100% - 48px)); margin-inline: auto }
+  h1, h2, h3 { color: var(--navy); font-weight: 700; letter-spacing: -.03em; line-height: 1.15; margin-top: 0 }
+  p { margin-top: 0 }
+  a { color: var(--navy-600) }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .88em; color: var(--navy-700); background: var(--surface-alt); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px }
+  .eyebrow { display: inline-block; color: var(--green); font-size: .74rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase }
+
+  .masthead { color: #fff; background: var(--navy); padding-block: 64px 56px }
+  .masthead .eyebrow { color: #7fd1ab }
+  .masthead h1 { color: #fff; font-size: clamp(2.4rem, 4.4vw, 3.9rem); margin: 18px 0 16px; letter-spacing: -.045em; max-width: 820px }
+  .masthead p { max-width: 720px; color: #c2d0e0; font-size: 1.06rem; line-height: 1.7; margin: 0 }
+  .facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-top: 40px }
+  .fact { padding: 20px 22px; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.16); border-radius: 8px }
+  .fact span { display: block; color: #9fb3c8; font-size: .78rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase }
+  .fact strong { display: block; margin-top: 10px; color: #fff; font-size: 1.75rem; font-variant-numeric: tabular-nums; letter-spacing: -.03em }
+  .fact small { color: #9fb3c8 }
+
+  main { padding-block: 56px 80px }
+  section { margin-bottom: 44px }
+  section > h2 { font-size: clamp(1.6rem, 2.6vw, 2.2rem); margin: 0 0 8px }
+  section > h2 + p { color: var(--muted); max-width: 760px }
+  h3.group { margin: 36px 0 14px; padding-bottom: 10px; border-bottom: 2px solid var(--navy); font-size: 1.05rem; letter-spacing: .02em; text-transform: uppercase }
+
+  .tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px }
+  .tablewrap table { border: 0; border-radius: 0; min-width: 620px }
+  table { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; font-size: .9rem; overflow: hidden }
+  th, td { padding: 12px 16px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line) }
+  th { color: var(--navy); background: var(--surface-alt); font-size: .73rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap }
+  tr:last-child td { border-bottom: 0 }
+  td.num { font-variant-numeric: tabular-nums; white-space: nowrap }
+
+  .finding { background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--line-strong); border-radius: 8px; padding: 22px 26px; margin-bottom: 14px }
+  .finding.mid { border-left-color: var(--amber) }
+  .finding.low { border-left-color: var(--navy-600) }
+  .finding.info { border-left-color: var(--green) }
+  .finding-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 12px; margin-bottom: 10px }
+  .finding-head h4 { margin: 0; color: var(--navy); font-size: 1.08rem; letter-spacing: -.01em }
+  .tag { padding: 3px 10px; border-radius: 4px; font-size: .7rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap }
+  .tag.mid { color: var(--amber); background: var(--amber-soft) }
+  .tag.low { color: var(--navy-700); background: #e8eef6 }
+  .tag.info { color: var(--green-700); background: var(--green-soft) }
+  .where { color: var(--muted); font-size: .82rem; font-variant-numeric: tabular-nums }
+  .finding p { margin: 0 0 10px; font-size: .94rem }
+  .finding p:last-child { margin-bottom: 0 }
+  .fix { padding-top: 10px; border-top: 1px solid var(--line); color: var(--green-700); font-size: .9rem }
+  .fix b { color: var(--green-700) }
+
+  .strength { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px }
+  .strength div { padding: 18px 22px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; font-size: .92rem; color: var(--muted) }
+  .strength b { display: block; margin-bottom: 5px; color: var(--navy) }
+
+  .verdict { padding: 30px 32px; color: #fff; background: var(--navy); border-radius: 8px }
+  .verdict h2 { color: #fff; margin-bottom: 12px }
+  .verdict p { color: #c2d0e0; max-width: 760px; margin: 0 0 10px }
+  .verdict p:last-child { margin-bottom: 0 }
+  .verdict b { color: #7fd1ab }
+  footer { padding-block: 26px; color: #9fb3c8; background: #081b33; font-size: .82rem }
+  .footer-inner { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 14px }
+  @media (max-width: 860px) { .facts { grid-template-columns: repeat(2, minmax(0, 1fr)) } .strength { grid-template-columns: 1fr } }
+  @media (max-width: 560px) { .wrap { width: min(100% - 28px, 1100px) } .facts { grid-template-columns: 1fr } .finding { padding: 19px 20px } }
+</style>
+</head>
+<body>
+
+<header class="masthead">
+  <div class="wrap">
+    <span class="eyebrow">Ревью и аудит кода</span>
+    <h1>Свои бумаги: состояние кода на 12 октября 2026</h1>
+    <p>Проверено рабочее дерево на коммите <code>99b30e0</code>: 19 модулей и 5822 строки в <code>src/svoibumagi</code>, девять шаблонов, конфигурация сборки и развёртывания, тесты. Критических находок нет; основная работа — вынести блокирующие расчёты из цикла событий, ограничить попытки входа и завести CI.</p>
+    <div class="facts">
+      <div class="fact"><span>Тесты</span><strong>189 / 189</strong><small>pytest, 6,45 с, 12.10.2026</small></div>
+      <div class="fact"><span>Находок</span><strong>19</strong><small>4 средних, 11 низких, 4 информационных</small></div>
+      <div class="fact"><span>Критических</span><strong>0</strong><small>доступ, журнал, арифметика — чисто</small></div>
+      <div class="fact"><span>Главная страница</span><strong>≈1,0 с</strong><small>блокировки процесса на 2817 событиях</small></div>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section>
+    <h2>Что проверено измерением, а не документами</h2>
+    <p>Все числа ниже получены прогоном в окружении проекта <code>.venv</code> на локальной базе из 5 счетов, 2817 событий и 9789 исходных строк.</p>
+    <div class="tablewrap"><table>
+      <tr><th>Проверка</th><th>Как проверено</th><th>Результат</th></tr>
+      <tr><td>Тесты</td><td><code>.venv/bin/pytest -q</code></td><td class="num"><b>189 passed</b>, 1 warning, 6,45 с</td></tr>
+      <tr><td>Время расчётов</td><td><code>financial_metrics</code> / <code>list_events</code> / <code>portfolio_estimate</code></td><td class="num">0,95 с / 0,83 с / 0,04 с</td></tr>
+      <tr><td>Масштабирование XIRR</td><td><code>xirr</code> на 51 / 201 / 501 / 1201 / 2501 потоках</td><td class="num">0,14 / 0,60 / 1,53 / 3,83 / 8,01 с</td></tr>
+      <tr><td>Рекурсия в XIRR</td><td>тот же прогон при стандартном лимите рекурсии</td><td><code>RecursionError</code> не воспроизводится</td></tr>
+      <tr><td>Стоимость проверки пароля</td><td><code>verify_password</code> с неверным паролем</td><td class="num">0,062 с, maxmem 64 МБ</td></tr>
+      <tr><td>Непрерывная интеграция</td><td><code>ls .github/workflows</code></td><td>каталога нет</td></tr>
+      <tr><td>Утечки приватных путей</td><td><code>grep</code> по <code>private/</code>, <code>samples/</code>, домашнему каталогу</td><td>только в текстах <code>--help</code></td></tr>
+    </table></div>
+  </section>
+
+  <section>
+    <h2>Что сделано хорошо</h2>
+    <p>Эти решения подтверждены чтением кода и не требуют вмешательства.</p>
+    <div class="strength">
+      <div><b>Неизменяемый журнал</b>Триггеры SQLite запрещают правку и удаление проведённых событий; схема версионируется, перед миграцией делается резервная копия и проверка целостности.</div>
+      <div><b>Одна транзакция на подтверждение</b><code>confirm_attempt</code> записывает события, наблюдения и решения владельца атомарно, с откатом при любой ошибке.</div>
+      <div><b>Только десятичная арифметика</b>Во всех расчётах нет ни одного <code>float</code>; XIRR считается в контексте с точностью 55 знаков и отказывается работать при неоднозначном корне.</div>
+      <div><b>Экспорт без инъекций</b><code>exports._text</code> экранирует ведущие <code>= + - @</code> и управляющие символы, поэтому CSV безопасно открывать в таблицах.</div>
+      <div><b>Проверяемая резервная копия</b>Архив содержит манифест, SHA-256 каждого файла и канонические имена; восстановление идёт через промежуточный каталог и запрещает симлинки и выход из <code>files/</code>.</div>
+      <div><b>Честные статусы</b>Недостаток данных даёт отдельный статус с причиной на русском, а не ноль и не мнимое совпадение. Это редкое и ценное свойство для учётной системы.</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Находки</h2>
+    <p>Уровень отражает последствия для единственного владельца на собственном экземпляре, а не абстрактную тяжесть класса уязвимости.</p>
+
+    <h3 class="group">Безопасность</h3>
+
+    <article class="finding mid">
+      <div class="finding-head"><span class="tag mid">средне</span><h4>S1 · Нет ограничения попыток входа</h4><span class="where">src/svoibumagi/web.py:148</span></div>
+      <p><code>POST /login</code> не считает неудачные попытки, не задерживает ответ и ничего не пишет в журнал. Одна проверка пароля стоит 62 мс процессорного времени и до 64 МБ <code>maxmem</code>, поэтому отсутствие лимита — это и окно для перебора при публичной публикации через <code>compose.public.yaml</code>, и дешёвый отказ в обслуживании: параллельные попытки блокируют единственный цикл событий и выедают память.</p>
+      <p class="fix"><b>Что сделать:</b> счётчик неудач по адресу и глобальный, экспоненциальная задержка, запись попыток в журнал.</p>
+    </article>
+
+    <article class="finding low">
+      <div class="finding-head"><span class="tag low">низко</span><h4>S2 · Проверка пароля без запаса на будущее</h4><span class="where">src/svoibumagi/auth.py:19</span></div>
+      <p><code>verify_password</code> жёстко требует <code>n=32768, r=8, p=1</code>. Хеш с другими параметрами молча вернёт «неверный пароль» вместо явной ошибки конфигурации, а повысить стоимость scrypt нельзя без одновременной правки кода и ручной смены пароля.</p>
+      <p class="fix"><b>Что сделать:</b> читать параметры из самого хеша, проверять нижнюю границу и различать «пароль неверен» и «хеш не поддерживается».</p>
+    </article>
+
+    <article class="finding low">
+      <div class="finding-head"><span class="tag low">низко</span><h4>S3 · Атрибуты удаляемой cookie не совпадают с установленными</h4><span class="where">src/svoibumagi/web.py:159</span></div>
+      <p><code>set_cookie</code> ставит одноразовый токен формы входа с <code>httponly</code>, <code>secure</code> и <code>samesite=strict</code>, а <code>delete_cookie</code> вызывается без атрибутов. Браузер вправе не сопоставить такие cookie, и токен останется жить до своих 600 секунд.</p>
+      <p class="fix"><b>Что сделать:</b> передать в <code>delete_cookie</code> те же <code>httponly</code>, <code>secure</code>, <code>samesite</code> и <code>path</code>.</p>
+    </article>
+
+    <article class="finding low">
+      <div class="finding-head"><span class="tag low">низко</span><h4>S4 · Истёкшие сессии убираются только при входе</h4><span class="where">src/svoibumagi/storage.py:717</span></div>
+      <p>Удаление просроченных строк выполняется внутри <code>create_session</code>. Проверка срока в <code>get_session_csrf</code> корректна, поэтому доступа это не даёт, но хеши токенов остаются в базе и попадают в резервные копии до следующего входа.</p>
+      <p class="fix"><b>Что сделать:</b> чистить и при выходе, и при проверке сессии.</p>
+    </article>
+
+    <article class="finding info">
+      <div class="finding-head"><span class="tag info">информационно</span><h4>S5 · CSP вынужденно разрешает встроенные стили</h4><span class="where">src/svoibumagi/web.py:76</span></div>
+      <p>Политика <code>default-src 'none'; style-src 'self' 'unsafe-inline'</code> не содержит <code>script-src</code> вовсе — JavaScript на страницах невозможен, и это осознанно строгий выбор. Но весь CSS живёт в <code>&lt;style&gt;</code> внутри шаблонов, поэтому <code>'unsafe-inline'</code> нельзя убрать, не начав отдавать статику. По той же причине шрифты Inter, Roboto и Open Sans подключаются только из системы, без внешних ссылок.</p>
+      <p class="fix"><b>Что сделать:</b> если дизайн будет расти — вынести CSS в отдельный маршрут и ужесточить до <code>style-src 'self'</code>.</p>
+    </article>
+
+    <h3 class="group">Надёжность и производительность</h3>
+
+    <article class="finding mid">
+      <div class="finding-head"><span class="tag mid">средне</span><h4>P1 · Блокирующая работа внутри цикла событий</h4><span class="where">src/svoibumagi/web.py:172, :253, :651</span></div>
+      <p>Все обработчики объявлены <code>async def</code>, но вызывают синхронный SQLite, парсеры и расчёты напрямую. Исключение одно — обновление котировок через <code>asyncio.to_thread</code>.</p>
+      <p>Измеренные последствия: главная страница блокирует процесс примерно на секунду, XIRR на 500 потоках — на 1,5 с, на 2500 — на 8 с. Парсер HTML Сбера допускает файл до 20 МБ, а <code>POST /backup</code> упаковывает базу и все исходные файлы (локально 8,8 МБ и 129 файлов) тоже в цикле событий. Пока владелец один, это терпимо, но на время такой операции сервер не отвечает никому, включая проверку состояния контейнера.</p>
+      <p class="fix"><b>Что сделать:</b> обернуть обращения к <code>Storage</code>, парсеры и <code>create_backup</code> в <code>asyncio.to_thread</code>, как уже сделано для котировок.</p>
+    </article>
+
+    <article class="finding mid">
+      <div class="finding-head"><span class="tag mid">средне</span><h4>P2 · Повторные проходы по журналу на один запрос</h4><span class="where">src/svoibumagi/storage.py (financial_metrics), web.py:119</span></div>
+      <p><code>financial_metrics</code> для каждого счёта заново читает проведённые отчёты и события, затем восстановление партий проходит по событиям ещё раз; <code>home_context</code> вдобавок вызывает <code>portfolio_estimate</code>, который повторно берёт последние снимки позиций. Результаты не кешируются даже в пределах одного запроса, поэтому время растёт линейно по числу событий и счетов.</p>
+      <p class="fix"><b>Что сделать:</b> прочитать события и снимки один раз на запрос и передавать параметрами; это снимет и большую часть P1.</p>
+    </article>
+
+    <article class="finding low">
+      <div class="finding-head"><span class="tag low">низко</span><h4>P3 · Соединение с SQLite без закрытия и без ожидания блокировки</h4><span class="where">src/svoibumagi/storage.py:631</span></div>
+      <p><code>_connect</code> возвращает соединение, а <code>with con</code> в вызывающем коде управляет только транзакцией: освобождение зависит от подсчёта ссылок CPython. Ни <code>busy_timeout</code>, ни WAL не выставлены, поэтому конкурентная запись — например, резервная копия во время импорта — даст немедленный <code>database is locked</code> вместо ожидания.</p>
+      <p class="fix"><b>Что сделать:</b> закрывать соединение явно и выставить <code>PRAGMA busy_timeout</code>, а режим журнала выбрать осознанно.</p>
+    </article>
+
+    <article class="finding low">
+      <div class="finding-head"><span class="tag low">низко</span><h4>P4 · Гонка по имени временного файла резервной копии</h4><span class="where">src/svoibumagi/web.py:655</span></div>
+      <p><code>mkstemp</code> создаёт файл, код его закрывает и удаляет, а затем передаёт освободившийся путь в <code>create_backup</code>. Между удалением и созданием архива путь никем не удерживается. Риск ограничен правами каталога данных (0700) и единственным владельцем.</p>
+      <p class="fix"><b>Что сделать:</b> отдавать <code>create_backup</code> имя внутри созданного <code>mkdtemp</code>.</p>
+    </article>
+
+    <h3 class="group">Корректность и ясность</h3>
+
+    <article class="finding low">
+      <div class="finding-head"><span class="tag low">низко</span><h4>C1 · Приоритет операторов в определении формата</h4><span class="where">src/svoibumagi/storage.py:115</span></div>
+      <p>Условие читается как <code>A or B or (C and D)</code>, то есть проверка на слово «Отчет» относится только к ветке с <code>&lt;table&gt;</code>. Следствия: любой HTML-файл уходит в парсер Сбера, а отчёт Сбера в cp1251 без <code>&lt;html&gt;</code> в первых 4096 байтах будет отвергнут как неизвестный контейнер, потому что подпись ищется только в UTF-8. Расширения <code>.xls</code> и <code>.xlsx</code> безусловно считаются Альфой.</p>
+      <p class="fix"><b>Что сделать:</b> расставить скобки по замыслу, искать подпись в обеих кодировках, а брокера для Excel определять по содержимому листа.</p>
+    </article>
+
+    <article class="finding info">
+      <div class="finding-head"><span class="tag info">информационно</span><h4>C2 · Подозрение на рекурсию в XIRR снято</h4><span class="where">src/svoibumagi/calculations.py:285</span></div>
+      <p>Поиск корней выглядит рекурсивным по производной, но на 2501 денежном потоке <code>RecursionError</code> не воспроизводится ни при повышенном, ни при стандартном лимите рекурсии. Проблема XIRR только во времени исполнения и описана в P1.</p>
+    </article>
+
+    <article class="finding low">
+      <div class="finding-head"><span class="tag low">низко</span><h4>C3 · В base.html было два набора стилей, второй перекрывал первый</h4><span class="where">src/svoibumagi/templates/base.html</span></div>
+      <p>Первые 50 строк задавали одну палитру и сетку, следующие 85 переопределяли почти всё заново: второй <code>:root</code>, второй <code>body</code>, вторые правила для <code>section</code>, <code>table</code> и <code>button</code>. Часть первого блока была недостижима, а любая правка требовала синхронизации двух мест.</p>
+      <p class="fix"><b>Исправлено:</b> стили сведены к одному набору токенов в общем файле <code>templates/_theme.css.html</code>.</p>
+    </article>
+
+    <article class="finding low">
+      <div class="finding-head"><span class="tag low">низко</span><h4>C4 · Лендинг держал собственную копию палитры</h4><span class="where">src/svoibumagi/templates/landing.html</span></div>
+      <p>134 строки CSS, не связанные с <code>base.html</code>: свои переменные цветов, свои размеры заголовков. Публичная и приватная части расходились при любой правке одной из них.</p>
+      <p class="fix"><b>Исправлено:</b> обе части подключают общий набор токенов, своё остаётся только специфичным для страницы.</p>
+    </article>
+
+    <article class="finding info">
+      <div class="finding-head"><span class="tag info">информационно</span><h4>C5 · Повторный импорт внутри функции</h4><span class="where">src/svoibumagi/storage.py:1336</span></div>
+      <p><code>add_price</code> делает <code>import re</code>, хотя модуль уже импортирован в заголовке файла.</p>
+    </article>
+
+    <article class="finding low">
+      <div class="finding-head"><span class="tag low">низко</span><h4>C6 · Заголовок страницы операций был оформлен иначе</h4><span class="where">src/svoibumagi/templates/operations.html:5</span></div>
+      <p>Простой <code>&lt;h2&gt;</code> вместо блока <code>.page-heading</code>, который используют остальные страницы.</p>
+      <p class="fix"><b>Исправлено:</b> заголовок приведён к общему виду с надзаголовком и пояснением.</p>
+    </article>
+
+    <h3 class="group">Процесс и зависимости</h3>
+
+    <article class="finding mid">
+      <div class="finding-head"><span class="tag mid">средне</span><h4>D1 · Нет автоматического прогона тестов</h4><span class="where">каталог .github/workflows отсутствует</span></div>
+      <p>189 тестов зелёные, но запускаются вручную. В <code>pyproject.toml</code> нет ни линтера, ни проверки типов, поэтому находки вида C1 или C5 не ловятся автоматически.</p>
+      <p class="fix"><b>Что сделать:</b> минимальный workflow: установка по <code>requirements.lock</code>, <code>pytest</code>, линтер; по желанию проверка типов на <code>src/svoibumagi</code>.</p>
+    </article>
+
+    <article class="finding low">
+      <div class="finding-head"><span class="tag low">низко</span><h4>D2 · Аудиторские скрипты не воспроизводимы публично</h4><span class="where">scripts/ — 23 файла</span></div>
+      <p><code>build_overlap_review.py</code>, <code>audit_source_provenance.py</code> и соседние ожидают файлы из <code>private/</code>. Для персональных данных это правильный выбор, но скрипты не покрыты тестами и не проверяются на синтетических образцах, поэтому могут сломаться незаметно.</p>
+      <p class="fix"><b>Что сделать:</b> синтетический мини-набор в <code>tests/</code> хотя бы для запуска каждого скрипта.</p>
+    </article>
+
+    <article class="finding low">
+      <div class="finding-head"><span class="tag low">низко</span><h4>D3 · Контейнер и локальная среда расходятся</h4><span class="where">pyproject.toml:11, requirements.lock</span></div>
+      <p>Зависимости заданы открытыми диапазонами без верхних границ, Docker собирается по <code>requirements.lock</code>, а локальная разработка — по диапазонам. Мажорное обновление FastAPI или Starlette сломает локальную установку, а контейнер этого не заметит.</p>
+      <p class="fix"><b>Что сделать:</b> верхние границы на мажорные версии и прогон тестов по <code>requirements.lock</code> в CI.</p>
+    </article>
+
+    <article class="finding info">
+      <div class="finding-head"><span class="tag info">информационно</span><h4>D4 · Предупреждение о будущем переходе на httpx2</h4><span class="where">вывод pytest</span></div>
+      <p><code>StarletteDeprecationWarning: Using httpx with starlette.testclient is deprecated; install httpx2 instead</code>. Тесты проходят, но при обновлении Starlette клиент тестов потребует другой зависимости.</p>
+    </article>
+  </section>
+
+  <section>
+    <h2>Сводка по уровням</h2>
+    <div class="tablewrap"><table>
+      <tr><th>Уровень</th><th>Находки</th><th>Что это значит</th></tr>
+      <tr><td><span class="tag mid">средне</span></td><td class="num">S1, P1, P2, D1</td><td>Стоит исправить до любой публичной публикации или заметного роста журнала.</td></tr>
+      <tr><td><span class="tag low">низко</span></td><td class="num">S2, S3, S4, P3, P4, C1, C3, C4, C6, D2, D3</td><td>Не влияет на сохранность данных; накапливается как технический долг.</td></tr>
+      <tr><td><span class="tag info">информационно</span></td><td class="num">S5, C2, C5, D4</td><td>Зафиксировано для памяти, действий не требует.</td></tr>
+    </table></div>
+  </section>
+
+  <section class="verdict">
+    <h2>Вывод</h2>
+    <p>Критических находок нет: <b>несанкционированного доступа к данным, потери журнала или ошибок в финансовой арифметике ревью не выявило</b>. Код строже обычного для проекта такого размера — неизменяемый журнал, десятичная арифметика, честные статусы недоступности.</p>
+    <p>Самое ценное к исправлению: вынести блокирующую работу из цикла событий (P1 и P2), ограничить попытки входа (S1) и завести автоматический прогон тестов (D1). В рамках этой работы устранены C3, C4 и C6 — стили сведены к одному набору токенов, публичная и приватная части используют общую палитру.</p>
+    <p>Текстовая версия отчёта: <code>docs/audit-2026-10-12.md</code>.</p>
+  </section>
+
+</main>
+
+<footer><div class="wrap footer-inner"><span>Свои бумаги · ревью и аудит кода · 12 октября 2026</span><span>Коммит 99b30e0 · ветка main</span></div></footer>
+</body>
+</html>
